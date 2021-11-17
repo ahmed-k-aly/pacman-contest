@@ -72,7 +72,7 @@ class DummyAgent(CaptureAgent):
     CaptureAgent.registerInitialState in captureAgents.py.
     '''
     CaptureAgent.registerInitialState(self, gameState)
-
+    print("sasa")
     '''
     Your initialization code goes here, if you need any.
     '''
