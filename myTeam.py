@@ -17,6 +17,7 @@ import util
 
 from captureAgents import CaptureAgent
 from game import Directions
+from operator import itemgetter
 
 
 #################
@@ -82,15 +83,57 @@ class DummyAgent(CaptureAgent):
 
     def chooseAction(self, gameState):
         """
-        Picks among actions randomly.
-        """
+    Picks among actions randomly.
+    """
+        '''
+                PICK AN ACTION
+        '''
         actions = gameState.getLegalActions(self.index)
+        # check if we're in home territory
+        # get pacman pos
+        isOffense = gameState.getAgentState(self.index).isPacman
+        # we are in home territory
+        if not isOffense:
+            return self.approachFoodAction(gameState, actions)
+        else:
+            # we are not in home territory.
+            # focus on eating food while avoiding ghosts.
+            return Directions.EAST
 
-        '''
-        You should change this in your own agent.
-        '''
+    def approachFoodAction(self, gameState, actions):
+        # TODO:
+        #  1. replace with A-star search
+        #  2. avoid ghosts.
+        #  3. predict position of ghosts.
+        # food action pairs
+        action_food_distance_list = []
+        # for each action
+        for action in actions:
+            # get the successor state (state after which agent takes an action)
+            successor_state = gameState.generateSuccessor(self.index, action)
+            # food list pacman is supposed to choose.
+            successor_foodList = self.getFood(successor_state).asList()
+            # get the agent state (AgentState instance let's us get position of agent)
+            agent_state = successor_state.getAgentState(self.index)
+            # access the position using agent position
+            successor_pos = agent_state.getPosition()
+            # list storing food distances
+            food_distances = []
+            # loop to get distance of all the food's in action
+            for food in successor_foodList:
+                # calculate the distance between food and position of pacman after action and food.
+                distance = self.distancer.getDistance(food, successor_pos)
+                # add to list of food distances
+                food_distances.append(distance)
+            # action and distance to nearest food list
+            action_food_distance = (action, min(food_distances))
+            # all legal actions (action, food distance) list
+            action_food_distance_list.append(action_food_distance)
 
-        return random.choice(actions)
+        if not action_food_distance_list:
+            "Oops, We can't take any action"
+            return None
+        return min(action_food_distance_list, key=itemgetter(1))[0]
 
 
 class FoodSearchAgent(CaptureAgent):
@@ -266,3 +309,6 @@ class Search:
                     new_frontier_node = (pos, new_actions, node_cost)
                     # in the frontier, cost includes heuristic cost
                     frontier.push(new_frontier_node, new_total_cost)
+
+
+
