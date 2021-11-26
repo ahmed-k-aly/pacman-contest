@@ -19,6 +19,7 @@ from baselineTeam import ReflexCaptureAgent
 from captureAgents import CaptureAgent
 from game import Directions
 from operator import itemgetter
+from capture import noisyDistance
 
 
 #################
@@ -59,28 +60,35 @@ class DummyAgent(CaptureAgent):
 
     def registerInitialState(self, gameState):
         """
-        This method handles the initial setup of the
-        agent to populate useful fields (such as what team
-        we're on).
+    This method handles the initial setup of the
+    agent to populate useful fields (such as what team
+    we're on).
 
-        A distanceCalculator instance caches the maze distances
-        between each pair of positions, so your agents can use:
-        self.distancer.getDistance(p1, p2)
+    A distanceCalculator instance caches the maze distances
+    between each pair of positions, so your agents can use:
+    self.distancer.getDistance(p1, p2)
 
-        IMPORTANT: This method may run for at most 15 seconds.
-        """
+    IMPORTANT: This method may run for at most 15 seconds.
+    """
 
         '''
-        Make sure you do not delete the following line. If you would like to
-        use Manhattan distances instead of maze distances in order to save
-        on initialization time, please take a look at
-        CaptureAgent.registerInitialState in captureAgents.py.
-        '''
+    Make sure you do not delete the following line. If you would like to
+    use Manhattan distances instead of maze distances in order to save
+    on initialization time, please take a look at
+    CaptureAgent.registerInitialState in captureAgents.py.
+    '''
         CaptureAgent.registerInitialState(self, gameState)
 
         '''
-        Your initialization code goes here, if you need any.
-        '''
+    Your initialization code goes here, if you need any.
+    '''
+
+        # initial agent pos
+        self.initialAgentPos = gameState.getInitialAgentPosition(self.index)
+        # check if it's on red Team
+
+        # limit of food we're defending
+        self.foodEaten = 0
 
     def chooseAction(self, gameState):
         """
@@ -94,7 +102,10 @@ class DummyAgent(CaptureAgent):
         # get pacman pos
         isOffense = gameState.getAgentState(self.index).isPacman
         # we are in home territory
-        return self.approachFoodAction(gameState, actions)
+        if self.foodEaten < 5:
+            return self.approachFoodAction(gameState, actions)
+        else:
+            return self.defendFoodAction(gameState, actions)
 
     def approachFoodAction(self, gameState, actions):
         # TODO:
@@ -105,6 +116,9 @@ class DummyAgent(CaptureAgent):
         action_food_distance_list = []
         # for each action
         for action in actions:
+            '''
+                SUCCESSOR STATE AND ALL IT HAS TO OFFER US (FOOD LIST, AGENT POSITION)
+            '''
             # get the successor state (state after which agent takes an action)
             successor_state = gameState.generateSuccessor(self.index, action)
             # food list pacman is supposed to choose.
@@ -112,20 +126,25 @@ class DummyAgent(CaptureAgent):
             # get the agent state (AgentState instance let's us get position of agent)
             agent_state = successor_state.getAgentState(self.index)
             # access the position using agent position
-            successor_pos = agent_state.getPosition()
+            new_agent_position = agent_state.getPosition()
+
+            '''
+                    FOOD DISTANCES TO DETERMINE OUR ACTION
+            '''
+
             # check if we have food nearby
-            # get all food positions we are to eat.
             food_positions = self.getFood(gameState)  # list of game states: self.getFood(gameState).asList()
             food_list = food_positions.asList()
             # EAT FOOD IF NEARBY
-            if successor_pos in food_list:
+            if new_agent_position in food_list:
+                self.foodEaten += 1
                 return action
             # list storing food distances
             food_distances = []
             # loop to get distance of all the food's in action
             for food in successor_foodList:
                 # calculate the distance between food and position of pacman after action and food.
-                distance = self.distancer.getDistance(food, successor_pos)
+                distance = self.distancer.getDistance(food, new_agent_position)
                 # add to list of food distances
                 food_distances.append(distance)
             # action and distance to nearest food list
@@ -137,6 +156,91 @@ class DummyAgent(CaptureAgent):
             "Oops, We can't take any action"
             return None
         return min(action_food_distance_list, key=itemgetter(1))[0]
+
+    def defendFoodAction(self, gameState, actions):
+        # TODO:
+        #  1. replace with A-star search
+        #  2. avoid ghosts.
+        #  3. predict position of ghosts.
+        # food action pairs
+        action_food_distance_list = []
+        # for each action
+        for action in actions:
+            # get the successor state (state after which agent takes an action)
+            successor_state = gameState.generateSuccessor(self.index, action)
+            # food list pacman is supposed to choose.
+            successor_foodList = self.getFoodYouAreDefending(successor_state).asList()
+            # get the agent state (AgentState instance let's us get position of agent)
+            agent_state = successor_state.getAgentState(self.index)
+            # access the position using agent position
+            successor_pos = agent_state.getPosition()
+            # check if we have food nearby
+            # get all food positions we are to eat.
+            # food_positions = self.getFood(gameState)  # list of game states: self.getFood(gameState).asList()
+            # food_list = food_positions.asList()
+            # if is pacman, reset the food count to 0
+            if not agent_state.isPacman:
+                self.foodEaten = 0
+                # if successor_pos in food_list:
+            #     return action
+            # threat weight
+            threat_weight = self.weighOpponentThreat(successor_state)
+            # list storing food distances
+            food_distances = []
+            # loop to get distance of all the food's in action
+            for food in successor_foodList:
+                # calculate the distance between food and position of pacman after action and food.
+                distance = self.distancer.getDistance(food, successor_pos)
+                # add to list of food distances
+                food_distances.append(threat_weight * distance)
+            # action and distance to nearest food list
+            action_food_distance = (action, min(food_distances))
+            # all legal actions (action, food distance) list
+            action_food_distance_list.append(action_food_distance)
+
+        if not action_food_distance_list:
+            "Oops, We can't take any action"
+            return None
+        return min(action_food_distance_list, key=itemgetter(1))[0]
+
+        # if we are on offense, evaluate danger then take action from the saved actions.
+
+    # method to define how opponent affects us (-ve opponent is no threat and therefore hunt them, +ve opponent is high threat so run)
+    def weighOpponentThreat(self, successor_state):
+        """
+            WEIGH THREAT BASED ON NOISY DISTANCES OF OPPONENTS
+        """
+        # get agent state so we can work
+        new_agent_state = successor_state.getAgentState(self.index)
+        # get the new agent position
+        new_agent_position = new_agent_state.getPosition()
+        # check if the agent is pacman
+        is_agent_pacman = new_agent_state.isPacman
+        # check if the agent is pacman and we're not a ghost
+        is_my_scared_timer_on = not is_agent_pacman and new_agent_state.scaredTimer > 0
+        # constant opponent threat
+        opponent_threat_weight = 1
+        threat_identifier = 1 if is_agent_pacman or is_my_scared_timer_on else -1
+        # get opponents
+        opponents = self.getOpponents(successor_state)
+        # for each opponent
+        for oppIndex in opponents:
+            opp_state = successor_state.getAgentState(oppIndex)
+            # if there scared timer is on, threat is low
+            threat_identifier = -1 if opp_state.scaredTimer > 0 else 1
+            # get the supposed agent index
+            opp_position = opp_state.getPosition()
+            # check if our reading returned anything
+            if opp_position:
+                # get the noisy distance from that position
+                noisy_distance = noisyDistance(new_agent_position, opp_position)
+                # if noisy distance is less than 2
+                if noisy_distance <= 2:
+                    # increment the threat weight
+                    opponent_threat_weight += 100
+
+        actual_threat = opponent_threat_weight * threat_identifier
+        return threat_identifier * opponent_threat_weight
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
