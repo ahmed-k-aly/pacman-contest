@@ -14,6 +14,7 @@
 
 import random
 import util
+from baselineTeam import ReflexCaptureAgent
 
 from captureAgents import CaptureAgent
 from game import Directions
@@ -25,7 +26,7 @@ from operator import itemgetter
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first='FoodSearchAgent', second='FoodSearchAgent'):
+               first='DummyAgent', second='DefensiveReflexAgent'):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
@@ -93,12 +94,7 @@ class DummyAgent(CaptureAgent):
         # get pacman pos
         isOffense = gameState.getAgentState(self.index).isPacman
         # we are in home territory
-        if not isOffense:
-            return self.approachFoodAction(gameState, actions)
-        else:
-            # we are not in home territory.
-            # focus on eating food while avoiding ghosts.
-            return Directions.EAST
+        return self.approachFoodAction(gameState, actions)
 
     def approachFoodAction(self, gameState, actions):
         # TODO:
@@ -117,6 +113,13 @@ class DummyAgent(CaptureAgent):
             agent_state = successor_state.getAgentState(self.index)
             # access the position using agent position
             successor_pos = agent_state.getPosition()
+            # check if we have food nearby
+            # get all food positions we are to eat.
+            food_positions = self.getFood(gameState)  # list of game states: self.getFood(gameState).asList()
+            food_list = food_positions.asList()
+            # EAT FOOD IF NEARBY
+            if successor_pos in food_list:
+                return action
             # list storing food distances
             food_distances = []
             # loop to get distance of all the food's in action
@@ -136,85 +139,42 @@ class DummyAgent(CaptureAgent):
         return min(action_food_distance_list, key=itemgetter(1))[0]
 
 
-class FoodSearchAgent(CaptureAgent):
-
-    def registerInitialState(self, gameState):
-        """
-    This method handles the initial setup of the
-    agent to populate useful fields (such as what team
-    we're on).
-
-    A distanceCalculator instance caches the maze distances
-    between each pair of positions, so your agents can use:
-    self.distancer.getDistance(p1, p2)
-
-    IMPORTANT: This method may run for at most 15 seconds.
+class DefensiveReflexAgent(ReflexCaptureAgent):
+    """
+    A reflex agent that keeps its side Pacman-free. Again,
+    this is to give you an idea of what a defensive agent
+    could be like.  It is not the best or only way to make
+    such an agent.
     """
 
-        '''
-    Make sure you do not delete the following line. If you would like to
-    use Manhattan distances instead of maze distances in order to save
-    on initialization time, please take a look at
-    CaptureAgent.registerInitialState in captureAgents.py.
-    '''
-        CaptureAgent.registerInitialState(self, gameState)
+    def getFeatures(self, gameState, action):
+        features = util.Counter()
+        successor = gameState.generateSuccessor(self.index, action)
 
-        '''
-    Your initialization code goes here, if you need any.
-    '''
+        myState = successor.getAgentState(self.index)
+        myPos = myState.getPosition()
 
-        # go thru each state and initialize q-values in each cell.
-        actions = gameState.getLegalActions()
+        # Computes whether we're on defense (1) or offense (0)
+        features['onDefense'] = 1
+        if myState.isPacman: features['onDefense'] = 0
 
-        # pacman position.
-        # find the matrix
-        food_matrix = self.getFood(gameState)
-        height = food_matrix.height
-        width = food_matrix.width
-        half_width = width / 2 - 1
-        # list containing places where we deem ourselves safe, (x, y) safety and back on def.
-        # (x+1, y) hunting, back to offense
-        openings = [(half_width, i) for i in range(height)]
-        self.openings = openings
-        self.problem = FindOpeningProblem(gameState, self.index, openings)
-        self.search = Search(self.problem)
+        # Computes distance to invaders we can see
+        enemies = [successor.getAgentState(i) for i in self.getOpponents(successor)]
+        invaders = [a for a in enemies if a.isPacman and a.getPosition() != None]
+        features['numInvaders'] = len(invaders)
+        if len(invaders) > 0:
+            dists = [self.getMazeDistance(myPos, a.getPosition()) for a in invaders]
+            features['invaderDistance'] = min(dists)
 
+        if action == Directions.STOP: features['stop'] = 1
+        rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+        if action == rev: features['reverse'] = 1
 
-        # # successor = self.getSuccessor(gameState, action)
-        # #
-        # #     myState = successor.getAgentState(self.index)
-        # #     myPos = myState.getPosition()
-        # state_values = util.Counter()
-        # values = list()
-        # for action in actions:
-        #     # get successor state, (calculate the nearest food from where we are)
-        #     successor = my_state.getSuccessor(gameState, action)
-        #     # food list
-        #     food_list = self.getFood(gameState).asList()
-        #     # get distance to the nearest food.
-        #     myPos = successor.getAgentState(self.index).getPosition()
-        #     # get pos in food list
-        #     minDistance = min([self.getMazeDistance(myPos, food) for food in food_list])
-        #     # basically don't consider where there is no food? Ideally we need not to check this case.
-        #     if minDistance != 0:
-        #         values.append((action, 1 / minDistance))
-        #
-        # state_values[position] = values
-        #
-        # # make the action, q-value pair for each state in the board.
-        # # down play when it's a corner
-        # # in-corporate paths and distances back to home base.
-        # # sonar readings as well.
-        available_actions = gameState.getLegalActions(self.index)
-        actions = self.search.aStarSearch(available_actions)
+        return features
 
-        self.counter = 0
-        self.actions = actions
+    def getWeights(self, gameState, action):
+        return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2}
 
-    def chooseAction(self, gameState):
-        action = self.actions[self.counter]
-        self.counter += 1
-        return action
 
 class FindOpeningProblem:
 
