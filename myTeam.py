@@ -56,9 +56,15 @@ class AlphaBetaAgent(CaptureAgent):
   def registerInitialState(self, gameState):
     """
     Same as ReflexCaptureAgent, but initializes max depth
+
+    COMBINING
+    To add a-b-search to another Agent, just add self.depth to another Agent's
+    version of this method
     """
     self.start = gameState.getAgentPosition(self.index)
-    self.depth = 3 # a depth of 4 considerably slows down
+    
+    # add this line to another Agent
+    self.depth = 3 # self.depth = 4 slows down considerably
     CaptureAgent.registerInitialState(self, gameState)
 
   def evaluationFunction(self, gameState):
@@ -78,6 +84,9 @@ class AlphaBetaAgent(CaptureAgent):
     currTurn - In this implementation, currTurn in this method is always 0.
     This is because our agent's turn is always first.
     alpha, beta - for pruning
+
+    COMBINING
+    Method must be copied for a-b-search to work in another agent
     """
     if d > self.depth: # max depth exceeded
       return self.evaluationFunction(gameState)
@@ -102,6 +111,9 @@ class AlphaBetaAgent(CaptureAgent):
     agentIndex - player whose turn it is right now. Can be any of MAX's opponents
     currTurn - currTurn + 1 is used to determine who's playing next
     alpha, beta - for pruning
+
+    COMBINING
+    Method must be copied for a-b-search to work in another agent
     """
     if d > self.depth:
       return self.evaluationFunction(gameState)
@@ -139,6 +151,9 @@ class AlphaBetaAgent(CaptureAgent):
     d - current depth, set to 0
     agentIndex - player whose turn it is right now; to start, our agent's index
     currTurn - current Turn, starts with 0
+
+    COMBINING
+    Method must be copied for a-b-search to work in another agent
     """
     
     alpha = float("-inf")
@@ -165,17 +180,19 @@ class AlphaBetaAgent(CaptureAgent):
         with an evaluation function based on score.
         Otherwise, chooses a random action
 
-        All functionality of this method can be added to a more robust version of this method
+        COMBINING
+        Code of this method can be included in a more robust Agent
       """
 
       # a list of all agents who are considered in our alpha-beta-search algorithm.
       # at the moment, only considers our agent and all visible opponents; our teammate is not considered.
       self.agents = [self.index]
-      for opp in self.getOpponents(gameState):
-        if gameState.getAgentPosition(opp): # if the opponent is visible
+      for opp in self.getOpponents(gameState): 
+        if gameState.getAgentPosition(opp):
           self.agents.append(opp)
 
       if len(self.agents) == 1: # if no opponents are visible
+        # the following line can be replaced with anything more productive
         return random.choice(gameState.getLegalActions(self.index))
 
       # else, initialize variables required for a-b-search
