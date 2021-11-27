@@ -63,6 +63,7 @@ class AlphaBetaAgent(CaptureAgent):
 
   def evaluationFunction(self, gameState):
     # need a much better evaluation function for this Agent to perform decently
+    # TODO: REPLACE ME
     return self.getScore(gameState)
 
   def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
