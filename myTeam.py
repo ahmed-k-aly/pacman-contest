@@ -220,14 +220,14 @@ class DummyAgent(CaptureAgent):
         is_my_scared_timer_on = not is_agent_pacman and new_agent_state.scaredTimer > 0
         # constant opponent threat
         opponent_threat_weight = 1
-        threat_identifier = 1 if is_agent_pacman or is_my_scared_timer_on else -1
         # get opponents
         opponents = self.getOpponents(successor_state)
         # for each opponent
         for oppIndex in opponents:
             opp_state = successor_state.getAgentState(oppIndex)
             # if there scared timer is on, threat is low
-            threat_identifier = -1 if opp_state.scaredTimer > 0 else 1
+            threat_identifier = 1 if (
+                                                 is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else -1
             # get the supposed agent index
             opp_position = opp_state.getPosition()
             # check if our reading returned anything
@@ -237,10 +237,9 @@ class DummyAgent(CaptureAgent):
                 # if noisy distance is less than 2
                 if noisy_distance <= 2:
                     # increment the threat weight
-                    opponent_threat_weight += 100
+                    opponent_threat_weight += (100 * threat_identifier)
 
-        actual_threat = opponent_threat_weight * threat_identifier
-        return threat_identifier * opponent_threat_weight
+        return opponent_threat_weight
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
