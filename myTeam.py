@@ -45,6 +45,146 @@ def createTeam(firstIndex, secondIndex, isRed,
 # Agents #
 ##########
 
+class AlphaBetaAgent(CaptureAgent):
+  """
+    A crappy agent that runs alpha-beta-search
+    Agent is yet to be thoroughly tested because its current evaluation function
+    is not very good and it chooses a random action if the opponent is not visible.
+    As such, it behaves poorly
+    To see it in proper action, combine with a more robust agent and a good evaluation function
+  """
+  def registerInitialState(self, gameState):
+    """
+    Same as ReflexCaptureAgent, but initializes max depth
+    """
+    self.start = gameState.getAgentPosition(self.index)
+    self.depth = 3 # a depth of 4 considerably slows down
+    CaptureAgent.registerInitialState(self, gameState)
+
+  def evaluationFunction(self, gameState):
+    # need a much better evaluation function for this Agent to perform decently
+    return self.getScore(gameState)
+
+  def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+    """
+    Represents MAX's turn. Returns the value of the best action
+    PARAM:
+    gameState
+    d - current depth, or "round of play". starts at depth 1, limit is self.depth
+    agentIndex - in this implementation, MAX can only be our agent. 
+    NOTE: If we wanted to include our teammate as the other MAX player, 
+    this method would need to be slightly changed
+    currTurn - In this implementation, currTurn in this method is always 0.
+    This is because our agent's turn is always first.
+    alpha, beta - for pruning
+    """
+    if d > self.depth: # max depth exceeded
+      return self.evaluationFunction(gameState)
+
+    v = float("-inf")
+    legalActions = gameState.getLegalActions()
+    for action in legalActions:
+      nextAgentIndex = self.agents[currTurn + 1] # whose turn is next
+      v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta)))
+      if v > beta:
+        # prune
+        return v
+      alpha = max(alpha, v)
+    return v
+
+  def minValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+    """
+    Represents MIN's turn. Returns the value of the best action
+    PARAM:
+    gameState
+    d - current depth, or "round of play". starts at depth 1, limit is self.depth
+    agentIndex - player whose turn it is right now. Can be any of MAX's opponents
+    currTurn - currTurn + 1 is used to determine who's playing next
+    alpha, beta - for pruning
+    """
+    if d > self.depth:
+      return self.evaluationFunction(gameState)
+    
+    v = float("inf")
+    legalActions = gameState.getLegalActions(agentIndex)
+    if currTurn == self.turns - 1:
+        # if last Agent of ply, call maxAgent to play
+        nextTurn = 0
+        nextAgentIndex = self.agents[nextTurn] # whose turn it is next
+        for action in legalActions:
+          v = min(v, self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn, alpha, beta))
+          if v < alpha:
+            # prune
+            return v
+          beta = min(beta, v)
+        return v
+    
+    # else, call another minAgent to play
+    for action in legalActions:
+      nextAgentIndex = self.agents[currTurn + 1]
+      v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta)))
+      if v < alpha:
+        # prune
+        return v
+      beta = min(beta,v)
+    return v
+  
+
+  def alphaBetaSearch(self, gameState, d, agentIndex, currTurn):
+    """
+    Runs alpha-beta-search algorithm. Starts with MAX player.
+    PARAM:
+    gameState
+    d - current depth, set to 0
+    agentIndex - player whose turn it is right now; to start, our agent's index
+    currTurn - current Turn, starts with 0
+    """
+    
+    alpha = float("-inf")
+    beta = float("inf")
+    v = float("-inf")
+    legalActions = gameState.getLegalActions(agentIndex)
+    previousV = float("-inf") # used for comparisons in determining the bestAction
+
+    for action in legalActions:
+      nextAgentIndex = self.agents[currTurn + 1] # whose turn it is next
+      v = max(v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta))
+      if v > previousV:
+        # compares every action value to return the best Action
+        bestAction = action
+      if v >= beta:
+        return bestAction
+      alpha = max(alpha, v)
+      previousV = v
+    return bestAction # basically, a complicated argmax
+
+  def chooseAction(self, gameState):
+      """
+        For our minimax agent, if any opponents are visible, runs alpha-beta-search, 
+        with an evaluation function based on score.
+        Otherwise, chooses a random action
+
+        All functionality of this method can be added to a more robust version of this method
+      """
+
+      # a list of all agents who are considered in our alpha-beta-search algorithm.
+      # at the moment, only considers our agent and all visible opponents; our teammate is not considered.
+      self.agents = [self.index]
+      for opp in self.getOpponents(gameState):
+        if gameState.getAgentPosition(opp): # if the opponent is visible
+          self.agents.append(opp)
+
+      if len(self.agents) == 1: # if no opponents are visible
+        return random.choice(gameState.getLegalActions(self.index))
+
+      # else, initialize variables required for a-b-search
+      self.turns = len(self.agents) # number of turns for each depth of a-b-search
+      currTurn = 0
+      agentIndex = self.agents[currTurn]
+      return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
+
+
+
 class DummyAgent(CaptureAgent):
   """
   A Dummy agent to serve as an example of the necessary agent structure.
