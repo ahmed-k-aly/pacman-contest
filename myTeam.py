@@ -226,8 +226,7 @@ class DummyAgent(CaptureAgent):
         for oppIndex in opponents:
             opp_state = successor_state.getAgentState(oppIndex)
             # if there scared timer is on, threat is low
-            threat_identifier = 1 if (
-                                                 is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else -1
+            threat_identifier = 1 if (is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else -1
             # get the supposed agent index
             opp_position = opp_state.getPosition()
             # check if our reading returned anything
@@ -294,8 +293,8 @@ class FindOpeningProblem:
 
     def getSuccessors(self, actions):
         walls = self.gameState.getWalls()
-        successors = list() # list of successors
-        for action in actions: # for action in actions
+        successors = list()  # list of successors
+        for action in actions:  # for action in actions
             successor_state = self.gameState.generateSuccessor(self.index, action)
             new_pacman_pos = successor_state.getAgentPosition(self.index)
             isPacmanInWall = new_pacman_pos in walls
@@ -372,6 +371,3 @@ class Search:
                     new_frontier_node = (pos, new_actions, node_cost)
                     # in the frontier, cost includes heuristic cost
                     frontier.push(new_frontier_node, new_total_cost)
-
-
-

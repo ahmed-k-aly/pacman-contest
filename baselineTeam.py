@@ -66,15 +66,8 @@ class ReflexCaptureAgent(CaptureAgent):
 
     def chooseAction(self, gameState):
         """
-    Picks among the actions with the highest Q(s,a).
-    """
-        opponents = self.getOpponents(gameState)
-        pacman_pos = gameState.getAgentPosition(self.index)
-        for opponent in opponents:
-            opp_pos = gameState.getAgentPosition(opponent)
-            if opp_pos is not None:
-                print "Pacman is at " + str(pacman_pos) + " while opponent is " + str(opp_pos)
-
+        Picks among the actions with the highest Q(s,a).
+        """
         actions = gameState.getLegalActions(self.index)
 
         # You can profile your evaluation time by uncommenting these lines
