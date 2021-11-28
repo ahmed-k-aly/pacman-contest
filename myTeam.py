@@ -10,8 +10,7 @@
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
-
-
+import math
 import random
 import util
 from baselineTeam import ReflexCaptureAgent
@@ -85,7 +84,27 @@ class DummyAgent(CaptureAgent):
 
         # initial agent pos
         self.initialAgentPos = gameState.getInitialAgentPosition(self.index)
+        # get opponents initial jail pos
+        opponents = self.getOpponents(gameState)
+        self.opponent_jail_pos = [gameState.getInitialAgentPosition(opponents[i]) for i in range(len(opponents))]
+        # counter to initialize probability of being eaten in a state.
+        opponent_probability = util.Counter()
+        # legal positions our pacman could occupy
+        legal_positions = [pos for pos in gameState.getWalls().asList(False) if pos[1] > 1]
+        print self.opponent_jail_pos
+        self.legal_positions = legal_positions
+        # initialize extra for jail positions (places where we have ghosts)
+        for pos in self.opponent_jail_pos:
+            opponent_probability[pos] += 2
+            legal_positions.remove(pos)
+
+        # initialize probability of opponent position uniformly elsewhere
+        for pos in legal_positions:
+            opponent_probability[pos] += 1
+        opponent_probability.normalize()
+
         # check if it's on red Team
+        self.opponent_position_distribution = opponent_probability
 
         # limit of food we're defending
         self.foodEaten = 0
@@ -94,6 +113,7 @@ class DummyAgent(CaptureAgent):
         """
     Picks among actions randomly.
     """
+
         '''
                 PICK AN ACTION
         '''
@@ -101,8 +121,14 @@ class DummyAgent(CaptureAgent):
         # check if we're in home territory
         # get pacman pos
         isOffense = gameState.getAgentState(self.index).isPacman
+        # food list
+        food_matrix = self.getFood(gameState)
+        food_list = food_matrix.asList()
+        remaining_food = [(x, y) for x, y in food_list if food_matrix[x][y]]
+        food_ratio = 0.25 * len(remaining_food)
+        #print len(remaining_food)
         # we are in home territory
-        if self.foodEaten < 5:
+        if self.foodEaten < math.ceil(food_ratio):
             return self.approachFoodAction(gameState, actions)
         else:
             return self.defendFoodAction(gameState, actions)
@@ -184,7 +210,22 @@ class DummyAgent(CaptureAgent):
                 # if successor_pos in food_list:
             #     return action
             # threat weight
-            threat_weight = self.weighOpponentThreat(successor_state)
+            # threat_weight = self.weighOpponentThreat(successor_state)
+            opponents = self.getOpponents(successor_state)
+            # for each opponent
+            for oppIndex in opponents:
+                opp_state = successor_state.getAgentState(oppIndex)
+                # get the supposed agent index
+                opp_position = opp_state.getPosition()
+                # check if our reading returned anything
+                if opp_position:
+                    # get the noisy distance from that position
+                    noisy_distance = noisyDistance(successor_pos, opp_position)
+                    # if noisy distance is less than 2
+                    if noisy_distance <= 2:
+                        # increment the threat weight
+                        print opp_state
+
             # list storing food distances
             food_distances = []
             # loop to get distance of all the food's in action
@@ -192,7 +233,7 @@ class DummyAgent(CaptureAgent):
                 # calculate the distance between food and position of pacman after action and food.
                 distance = self.distancer.getDistance(food, successor_pos)
                 # add to list of food distances
-                food_distances.append(threat_weight * distance)
+                food_distances.append(distance)
             # action and distance to nearest food list
             action_food_distance = (action, min(food_distances))
             # all legal actions (action, food distance) list
@@ -216,7 +257,7 @@ class DummyAgent(CaptureAgent):
         new_agent_position = new_agent_state.getPosition()
         # check if the agent is pacman
         is_agent_pacman = new_agent_state.isPacman
-        # check if the agent is pacman and we're not a ghost
+        # check if the our agent is a ghost and our scared timer is on
         is_my_scared_timer_on = not is_agent_pacman and new_agent_state.scaredTimer > 0
         # constant opponent threat
         opponent_threat_weight = 1
