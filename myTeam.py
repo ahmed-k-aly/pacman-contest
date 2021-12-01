@@ -112,7 +112,7 @@ class DummyAgent(CaptureAgent):
         self._hasStarted = False
 
         # for alpha-beta pruning
-        self.depth = 3
+        self.depth = 2
 
     def chooseAction(self, gameState):
         """
@@ -136,10 +136,24 @@ class DummyAgent(CaptureAgent):
         food_ratio = 0.25 * len(remaining_food)
         # print len(remaining_food)
         # we are in home territory
-        if self.foodEaten < math.ceil(food_ratio):
-            return self.approachFoodAction(gameState, actions)
-        else:
-            return self.defendFoodAction(gameState, actions)
+
+        # a list of all agents who are considered in our alpha-beta-search algorithm.
+        # at the moment, only considers our agent and all visible opponents; our teammate is not considered.
+        self.agents = [self.index]
+        for opp in self.getOpponents(gameState): 
+            if gameState.getAgentPosition(opp):
+                self.agents.append(opp)
+
+        if len(self.agents) == 1:
+            if self.foodEaten < math.ceil(food_ratio):
+                return self.approachFoodAction(gameState, actions)
+            else:
+                return self.defendFoodAction(gameState, actions)
+
+        self.turns = len(self.agents) # number of turns for each depth of a-b-search
+        currTurn = 0
+        agentIndex = self.agents[currTurn]
+        return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
 
     def approachFoodAction(self, gameState, actions):
         # TODO:
@@ -295,6 +309,24 @@ class DummyAgent(CaptureAgent):
                     opponent_threat_weight += (100 * threat_identifier)
 
         return opponent_threat_weight
+    
+    def evaluationFunction(self, gameState):
+        # need a much better evaluation function for this Agent to perform decently
+        # TODO: REPLACE ME
+        opponents = self.getOpponents(gameState)
+        # for each opponent
+        totalNoisyDistance = 0
+        for oppIndex in opponents:
+            opp_state = gameState.getAgentState(oppIndex)
+            # get the supposed agent index
+            opp_position = opp_state.getPosition()
+            # check if our reading returned anything
+            if opp_position:
+                # get the noisy distance from that position
+                noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
+                # if noisy distance is less than 2
+                totalNoisyDistance += noisy_distance
+        return -totalNoisyDistance
 
     def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
         """
@@ -363,6 +395,37 @@ class DummyAgent(CaptureAgent):
                 return v
             beta = min(beta,v)
         return v
+
+    def alphaBetaSearch(self, gameState, d, agentIndex, currTurn):
+        """
+        Runs alpha-beta-search algorithm. Starts with MAX player.
+        PARAM:
+        gameState
+        d - current depth, set to 0
+        agentIndex - player whose turn it is right now; to start, our agent's index
+        currTurn - current Turn, starts with 0
+
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+    
+        alpha = float("-inf")
+        beta = float("inf")
+        v = float("-inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        previousV = float("-inf") # used for comparisons in determining the bestAction
+
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1] # whose turn it is next
+            v = max(v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta))
+            if v > previousV:
+                # compares every action value to return the best Action
+                bestAction = action
+            if v >= beta:
+                return bestAction
+            alpha = max(alpha, v)
+            previousV = v
+        return bestAction # basically, a complicated argmax
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
