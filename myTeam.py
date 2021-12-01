@@ -111,6 +111,9 @@ class DummyAgent(CaptureAgent):
         # have we started the game
         self._hasStarted = False
 
+        # for alpha-beta pruning
+        self.depth = 3
+
     def chooseAction(self, gameState):
         """
     Picks among actions randomly.
@@ -292,6 +295,74 @@ class DummyAgent(CaptureAgent):
                     opponent_threat_weight += (100 * threat_identifier)
 
         return opponent_threat_weight
+
+    def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+        """
+        Represents MAX's turn. Returns the value of the best action
+        PARAM:
+        gameState
+        d - current depth, or "round of play". starts at depth 1, limit is self.depth
+        agentIndex - in this implementation, MAX can only be our agent. 
+        NOTE: If we wanted to include our teammate as the other MAX player, 
+        this method would need to be slightly changed
+        currTurn - In this implementation, currTurn in this method is always 0.
+        This is because our agent's turn is always first.
+        alpha, beta - for pruning
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+        if d > self.depth: # max depth exceeded
+            return self.evaluationFunction(gameState)
+
+        v = float("-inf")
+        legalActions = gameState.getLegalActions()
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1] # whose turn is next
+            v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta)))
+            if v > beta:
+                # prune
+                return v
+            alpha = max(alpha, v)
+        return v
+
+    def minValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+        """
+        Represents MIN's turn. Returns the value of the best action
+        PARAM:
+        gameState
+        d - current depth, or "round of play". starts at depth 1, limit is self.depth
+        agentIndex - player whose turn it is right now. Can be any of MAX's opponents
+        currTurn - currTurn + 1 is used to determine who's playing next
+        alpha, beta - for pruning
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+        if d > self.depth:
+            return self.evaluationFunction(gameState)
+    
+        v = float("inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        if currTurn == self.turns - 1:
+            # if last Agent of ply, call maxAgent to play
+            nextTurn = 0
+            nextAgentIndex = self.agents[nextTurn] # whose turn it is next
+            for action in legalActions:
+                v = min(v, self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn, alpha, beta))
+                if v < alpha:
+                    # prune
+                    return v
+                beta = min(beta, v)
+            return v
+        
+        # else, call another minAgent to play
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1]
+            v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta)))
+            if v < alpha:
+                # prune
+                return v
+            beta = min(beta,v)
+        return v
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
