@@ -108,10 +108,16 @@ class DummyAgent(CaptureAgent):
         # limit of food we're defending
         self.foodEaten = 0
 
+        # have we started the game
+        self._hasStarted = False
+
     def chooseAction(self, gameState):
         """
     Picks among actions randomly.
     """
+        if not self._hasStarted:
+            self._hasStarted = True
+
 
         '''
                 PICK AN ACTION
@@ -244,6 +250,13 @@ class DummyAgent(CaptureAgent):
         return min(action_food_distance_list, key=itemgetter(1))[0]
 
         # if we are on offense, evaluate danger then take action from the saved actions.
+
+    def didWeDie(self, gameState):
+        if self._hasStarted:
+            agent_state = gameState.getAgentState(self.index)
+            agent_position = agent_state.getPosition()
+            if agent_position == self.initialAgentPos:
+                print "Oh shit, here we go again"
 
     # method to define how opponent affects us (-ve opponent is no threat and therefore hunt them, +ve opponent is high threat so run)
     def weighOpponentThreat(self, successor_state):
