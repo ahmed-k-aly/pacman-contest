@@ -98,7 +98,8 @@ class DummyAgent(CaptureAgent):
         # initialize extra for jail positions (places where we have ghosts)
         for pos in self.opponent_jail_pos:
             opponent_probability[pos] += 2
-            legal_positions.remove(pos)
+            if pos in legal_positions:
+                legal_positions.remove(pos)
 
         # initialize probability of opponent position uniformly elsewhere
         for pos in legal_positions:
@@ -324,7 +325,7 @@ class DummyAgent(CaptureAgent):
             return self.evaluationFunction(gameState)
 
         v = float("-inf")
-        legalActions = gameState.getLegalActions()
+        legalActions = gameState.getLegalActions(agentIndex)
         for action in legalActions:
             nextAgentIndex = self.agents[currTurn + 1]  # whose turn is next
             v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
