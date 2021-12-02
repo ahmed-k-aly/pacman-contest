@@ -89,8 +89,11 @@ class DummyAgent(CaptureAgent):
         # counter to initialize probability of being eaten in a state.
         opponent_probability = util.Counter()
         # legal positions our pacman could occupy
-        legal_positions = [pos for pos in gameState.getWalls().asList(False) if pos[1] > 1]
-        print self.opponent_jail_pos
+        game_walls = gameState.getWalls()
+        legal_positions = [pos for pos in game_walls.asList(False) if pos[1] > 1]
+        # count the number of walls each legal position has
+        self.countWallsPerPosition(legal_positions, game_walls)
+
         self.legal_positions = legal_positions
         # initialize extra for jail positions (places where we have ghosts)
         for pos in self.opponent_jail_pos:
@@ -121,7 +124,6 @@ class DummyAgent(CaptureAgent):
         if not self._hasStarted:
             self._hasStarted = True
 
-
         '''
                 PICK AN ACTION
         '''
@@ -133,14 +135,14 @@ class DummyAgent(CaptureAgent):
         food_matrix = self.getFood(gameState)
         food_list = food_matrix.asList()
         remaining_food = [(x, y) for x, y in food_list if food_matrix[x][y]]
-        food_ratio = max(0.25 * len(remaining_food), 0.5 * gameState.getScore())
+        food_ratio = max(0.25 * len(remaining_food), 0.25 * gameState.getScore())
         # print len(remaining_food)
         # we are in home territory
 
         # a list of all agents who are considered in our alpha-beta-search algorithm.
         # at the moment, only considers our agent and all visible opponents; our teammate is not considered.
         self.agents = [self.index]
-        for opp in self.getOpponents(gameState): 
+        for opp in self.getOpponents(gameState):
             if gameState.getAgentPosition(opp):
                 self.agents.append(opp)
 
@@ -150,7 +152,7 @@ class DummyAgent(CaptureAgent):
             else:
                 return self.defendFoodAction(gameState, actions)
 
-        self.turns = len(self.agents) # number of turns for each depth of a-b-search
+        self.turns = len(self.agents)  # number of turns for each depth of a-b-search
         currTurn = 0
         agentIndex = self.agents[currTurn]
         return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
@@ -246,7 +248,8 @@ class DummyAgent(CaptureAgent):
                     # if noisy distance is less than 2
                     if noisy_distance <= 2:
                         # increment the threat weight
-                        print opp_state
+                        print
+                        opp_state
 
             # list storing food distances
             food_distances = []
@@ -278,6 +281,7 @@ class DummyAgent(CaptureAgent):
     def evaluationFunction(self, gameState):
         agent_state = gameState.getAgentState(self.index)
         is_agent_pacman = agent_state.isPacman
+        pacman_pos = agent_state.getPosition()
         # check if the our agent is a ghost and our scared timer is on
         is_my_scared_timer_on = not is_agent_pacman and agent_state.scaredTimer > 0
         # need a much better evaluation function for this Agent to perform decently
@@ -289,14 +293,16 @@ class DummyAgent(CaptureAgent):
             opp_state = gameState.getAgentState(oppIndex)
             # get the supposed agent index
             opp_position = opp_state.getPosition()
+            # threat identifier is a -1 if a state is bad for us (since it'll be multiplied by -1 at the end) and positive if state is good for us
             threat_identifier = -1 if (is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else 1
-
             # check if our reading returned anything
             if opp_position:
                 # get the noisy distance from that position
                 noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
                 # if noisy distance is less than 2
-                totalNoisyDistance += noisy_distance * threat_identifier
+                num_walls = 1 if self.num_walls[pacman_pos] == 0 else self.num_walls[pacman_pos]
+                num_walls_eval = num_walls * 100
+                totalNoisyDistance += (noisy_distance + num_walls_eval) * threat_identifier
         return -totalNoisyDistance
 
     def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
@@ -314,14 +320,15 @@ class DummyAgent(CaptureAgent):
         COMBINING
         Method must be copied for a-b-search to work in another agent
         """
-        if d > self.depth: # max depth exceeded
+        if d > self.depth:  # max depth exceeded
             return self.evaluationFunction(gameState)
 
         v = float("-inf")
         legalActions = gameState.getLegalActions()
         for action in legalActions:
-            nextAgentIndex = self.agents[currTurn + 1] # whose turn is next
-            v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta)))
+            nextAgentIndex = self.agents[currTurn + 1]  # whose turn is next
+            v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta)))
             if v > beta:
                 # prune
                 return v
@@ -342,29 +349,32 @@ class DummyAgent(CaptureAgent):
         """
         if d > self.depth:
             return self.evaluationFunction(gameState)
-    
+
         v = float("inf")
         legalActions = gameState.getLegalActions(agentIndex)
         if currTurn == self.turns - 1:
             # if last Agent of ply, call maxAgent to play
             nextTurn = 0
-            nextAgentIndex = self.agents[nextTurn] # whose turn it is next
+            nextAgentIndex = self.agents[nextTurn]  # whose turn it is next
             for action in legalActions:
-                v = min(v, self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn, alpha, beta))
+                v = min(v,
+                        self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn,
+                                      alpha, beta))
                 if v < alpha:
                     # prune
                     return v
                 beta = min(beta, v)
             return v
-        
+
         # else, call another minAgent to play
         for action in legalActions:
             nextAgentIndex = self.agents[currTurn + 1]
-            v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta)))
+            v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta)))
             if v < alpha:
                 # prune
                 return v
-            beta = min(beta,v)
+            beta = min(beta, v)
         return v
 
     def alphaBetaSearch(self, gameState, d, agentIndex, currTurn):
@@ -379,16 +389,17 @@ class DummyAgent(CaptureAgent):
         COMBINING
         Method must be copied for a-b-search to work in another agent
         """
-    
+
         alpha = float("-inf")
         beta = float("inf")
         v = float("-inf")
         legalActions = gameState.getLegalActions(agentIndex)
-        previousV = float("-inf") # used for comparisons in determining the bestAction
+        previousV = float("-inf")  # used for comparisons in determining the bestAction
 
         for action in legalActions:
-            nextAgentIndex = self.agents[currTurn + 1] # whose turn it is next
-            v = max(v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1, alpha, beta))
+            nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
+            v = max(v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                     alpha, beta))
             if v > previousV:
                 # compares every action value to return the best Action
                 bestAction = action
@@ -396,7 +407,28 @@ class DummyAgent(CaptureAgent):
                 return bestAction
             alpha = max(alpha, v)
             previousV = v
-        return bestAction # basically, a complicated argmax
+        return bestAction  # basically, a complicated argmax
+
+    # find adjacent cells of grid python
+    def get_adjacent_indices(self, pos):
+        x, y = pos
+        adjacent_indices = []
+        adjacent_indices.append((x - 1, y))
+        adjacent_indices.append((x + 1, y))
+        adjacent_indices.append((x, y - 1))
+        adjacent_indices.append((x, y + 1))
+        return adjacent_indices
+
+    # counts the number of walls each state has
+    def countWallsPerPosition(self, legal_positions, game_walls):
+        self.num_walls = util.Counter()
+        for pos in legal_positions:
+            walls = game_walls.asList(True)
+            adjacent = self.get_adjacent_indices(pos)
+            for wall in adjacent:
+                if wall in walls:
+                    self.num_walls[pos] += 1
+        self.num_walls.normalize()
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
