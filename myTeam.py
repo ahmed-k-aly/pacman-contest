@@ -133,7 +133,7 @@ class DummyAgent(CaptureAgent):
         food_matrix = self.getFood(gameState)
         food_list = food_matrix.asList()
         remaining_food = [(x, y) for x, y in food_list if food_matrix[x][y]]
-        food_ratio = 0.25 * len(remaining_food)
+        food_ratio = max(0.25 * len(remaining_food), 0.5 * gameState.getScore())
         # print len(remaining_food)
         # we are in home territory
 
@@ -268,49 +268,18 @@ class DummyAgent(CaptureAgent):
 
         # if we are on offense, evaluate danger then take action from the saved actions.
 
-    def didWeDie(self, gameState):
-        if self._hasStarted:
-            agent_state = gameState.getAgentState(self.index)
-            agent_position = agent_state.getPosition()
-            if agent_position == self.initialAgentPos:
-                print "Oh shit, here we go again"
+    # def didWeDie(self, gameState):
+    #     if self._hasStarted:
+    #         agent_state = gameState.getAgentState(self.index)
+    #         agent_position = agent_state.getPosition()
+    #         if agent_position == self.initialAgentPos:
+    #             "Oh shit, here we go again"
 
-    # method to define how opponent affects us (-ve opponent is no threat and therefore hunt them, +ve opponent is high threat so run)
-    def weighOpponentThreat(self, successor_state):
-        """
-            WEIGH THREAT BASED ON NOISY DISTANCES OF OPPONENTS
-        """
-        # get agent state so we can work
-        new_agent_state = successor_state.getAgentState(self.index)
-        # get the new agent position
-        new_agent_position = new_agent_state.getPosition()
-        # check if the agent is pacman
-        is_agent_pacman = new_agent_state.isPacman
-        # check if the our agent is a ghost and our scared timer is on
-        is_my_scared_timer_on = not is_agent_pacman and new_agent_state.scaredTimer > 0
-        # constant opponent threat
-        opponent_threat_weight = 1
-        # get opponents
-        opponents = self.getOpponents(successor_state)
-        # for each opponent
-        for oppIndex in opponents:
-            opp_state = successor_state.getAgentState(oppIndex)
-            # if there scared timer is on, threat is low
-            threat_identifier = 1 if (is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else -1
-            # get the supposed agent index
-            opp_position = opp_state.getPosition()
-            # check if our reading returned anything
-            if opp_position:
-                # get the noisy distance from that position
-                noisy_distance = noisyDistance(new_agent_position, opp_position)
-                # if noisy distance is less than 2
-                if noisy_distance <= 2:
-                    # increment the threat weight
-                    opponent_threat_weight += (100 * threat_identifier)
-
-        return opponent_threat_weight
-    
     def evaluationFunction(self, gameState):
+        agent_state = gameState.getAgentState(self.index)
+        is_agent_pacman = agent_state.isPacman
+        # check if the our agent is a ghost and our scared timer is on
+        is_my_scared_timer_on = not is_agent_pacman and agent_state.scaredTimer > 0
         # need a much better evaluation function for this Agent to perform decently
         # TODO: REPLACE ME
         opponents = self.getOpponents(gameState)
@@ -320,12 +289,14 @@ class DummyAgent(CaptureAgent):
             opp_state = gameState.getAgentState(oppIndex)
             # get the supposed agent index
             opp_position = opp_state.getPosition()
+            threat_identifier = -1 if (is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else 1
+
             # check if our reading returned anything
             if opp_position:
                 # get the noisy distance from that position
                 noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
                 # if noisy distance is less than 2
-                totalNoisyDistance += noisy_distance
+                totalNoisyDistance += noisy_distance * threat_identifier
         return -totalNoisyDistance
 
     def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
