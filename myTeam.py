@@ -144,9 +144,10 @@ class DummyAgent(CaptureAgent):
             # access the position using agent position
             new_agent_position = agent_state.getPosition()
             # distance to max probability
-            dist = self.getMazeDistance(new_agent_position, new_belief.argMax())
-            action_ghost_prob_pairs.append((action, dist))
+            print new_belief.argMax()
+            distance = self.getMazeDistance(new_agent_position, new_belief.argMax())
+            action_ghost_prob_pairs.append((action, distance))
 
         # update the belief state
         self.opponent_position_distribution = new_belief
-        return max(action_ghost_prob_pairs, key=itemgetter(1))[0]
+        return min(action_ghost_prob_pairs, key=itemgetter(1))[0]
