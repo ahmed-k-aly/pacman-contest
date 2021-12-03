@@ -85,8 +85,9 @@ class DummyAgent(CaptureAgent):
         opponents = self.getOpponents(gameState)
         self.opponent_jail_pos = [gameState.getInitialAgentPosition(opponents[i]) for i in range(len(opponents))]
         self.opponents = opponents
-        # counter to initialize probability of being eaten in a state.
-        opponent_probability = util.Counter()
+        # distributions of belief of position for each opponent
+        self.opp_beliefs = [util.Counter() for _ in range(len(opponents))]
+        
         # legal positions our pacman could occupy
         legal_positions = [pos for pos in gameState.getWalls().asList(False) if pos[1] > 1]
         for jail in self.opponent_jail_pos:
@@ -95,40 +96,52 @@ class DummyAgent(CaptureAgent):
             legal_positions.append(jail)
                 
         self.legal_positions = legal_positions
-
+        
+        # set distribution for opponents, so that we b
+        for i, belief in enumerate(self.opp_beliefs):
+            belief[self.opponent_jail_pos[i]] = 1
+            belief.normalize()
+        
         # initialize legal positions as well
-        for pos in legal_positions:
-            opponent_probability[pos] += 1
-            if pos in self.opponent_jail_pos:
-                opponent_probability[pos] += 1
+        # for pos in legal_positions:
+        #     opp_distribution[pos] += 1
+        #     if pos in self.opponent_jail_pos:
+        #         opp_distribution[pos] += 1
 
-        opponent_probability.normalize()
+        # opp_distribution.normalize()
 
         # check if it's on red Team
-        self.opponent_position_distribution = opponent_probability
+        # self.opponent_beliefs = opp_distribution
 
     def chooseAction(self, gameState):
         """
     Picks among actions randomly.
     """
-        # pacman position now
-        pacman_pos = gameState.getAgentState(self.index).getPosition()
-        new_belief = util.Counter()
-        # get agent distances
-        noisy_distances = gameState.getAgentDistances()
-        # get noisy distance for each opponent
-        for opp in self.opponents:
-            # get noisy distance of the opponent
-            noisy_dist = noisy_distances[opp]
-            # update the belief state
-            for pos in self.legal_positions:
-                # get the true distance
-                true_distance = self.getMazeDistance(pacman_pos, pos)
-                prob = gameState.getDistanceProb(true_distance, noisy_dist)
-                # new probability * the old probability
-                new_belief[pos] = prob 
-        new_belief.normalize()
+        # # pacman position now
+        # pacman_pos = gameState.getAgentState(self.index).getPosition()
+        # new_belief = util.Counter()
+        # # get agent distances
+        # noisy_distances = gameState.getAgentDistances()
+        # # get noisy distance for each opponent
+        # for opp in self.opponents:
+        #     # get noisy distance of the opponent
+        #     noisy_dist = noisy_distances[opp]
+        #     # update the belief state
+        #     for pos in self.legal_positions:
+        #         # get the true distance
+        #         true_distance = self.getMazeDistance(pacman_pos, pos)
+        #         prob = gameState.getDistanceProb(true_distance, noisy_dist)
+        #         # new probability * the old probability
+        #         new_belief[pos] += prob 
+        # new_belief.normalize()
 
+
+        noisy_distances = gameState.getAgentDistances()
+        for oppIndex in range(len(self.opponents)):
+            # for every opponent, update the beliefs based on the noisydistances observations
+            self.observe(oppIndex, noisy_distances[oppIndex], gameState)
+
+        # now, consider the best action to take
         actions = gameState.getLegalActions(self.index)
         action_ghost_prob_pairs = []
         for action in actions:
@@ -144,10 +157,33 @@ class DummyAgent(CaptureAgent):
             # access the position using agent position
             new_agent_position = agent_state.getPosition()
             # distance to max probability
-            print new_belief.argMax()
-            distance = self.getMazeDistance(new_agent_position, new_belief.argMax())
-            action_ghost_prob_pairs.append((action, distance))
+
+            distances = []
+            for beliefs in self.opp_beliefs:
+                distance = self.getMazeDistance(new_agent_position, beliefs.argMax())
+                distances.append(distance)
+
+            # distance = self.getMazeDistance(new_agent_position, new_belief.argMax())
+            action_ghost_prob_pairs.append((action, max(distances)))
 
         # update the belief state
-        self.opponent_position_distribution = new_belief
+        # self.opponent_position_distribution = new_belief
         return min(action_ghost_prob_pairs, key=itemgetter(1))[0]
+
+    def observe(self, oppIndex, observation, gameState):
+        # based on tracking project's observe from Exact Inference,
+        # but for a given opponent indicated by oppIndex
+        noisyDistance = observation
+        allPossible = util.Counter()
+        agentPos = gameState.getAgentState(self.index).getPosition()
+        for pos in self.legal_positions:
+            true_distance = self.getMazeDistance(agentPos, pos)
+            emissionProb = gameState.getDistanceProb(true_distance, noisyDistance)
+            allPossible[pos] = emissionProb * self.opp_beliefs[oppIndex][pos]
+        
+        allPossible.normalize()
+        self.opp_beliefs[oppIndex] = allPossible
+
+
+        
+            
