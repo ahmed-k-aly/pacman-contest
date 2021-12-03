@@ -126,7 +126,7 @@ class DummyAgent(CaptureAgent):
                 true_distance = self.getMazeDistance(pacman_pos, pos)
                 prob = gameState.getDistanceProb(true_distance, noisy_dist)
                 # new probability * the old probability
-                new_belief[pos] = prob
+                new_belief[pos] = prob 
         new_belief.normalize()
 
         actions = gameState.getLegalActions(self.index)
@@ -143,7 +143,9 @@ class DummyAgent(CaptureAgent):
             agent_state = successor_state.getAgentState(self.index)
             # access the position using agent position
             new_agent_position = agent_state.getPosition()
-            action_ghost_prob_pairs.append((action, new_belief[new_agent_position]))
+            # distance to max probability
+            dist = self.getMazeDistance(new_agent_position, new_belief.argMax())
+            action_ghost_prob_pairs.append((action, dist))
 
         # update the belief state
         self.opponent_position_distribution = new_belief
