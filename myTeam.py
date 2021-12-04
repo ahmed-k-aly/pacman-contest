@@ -948,14 +948,15 @@ class FoodGreedyDummyAgent(CaptureAgent):
         '''INFERENCE'''
         # agents for Minimax
         self.agents = [self.index]
+        for opp in self.getOpponents(gameState):
+            if gameState.getAgentPosition(opp):
+                self.agents.append(opp)
         opponents = self.getOpponents(gameState)
 
-        for oppIndex in opponents:
-            self.agents.append(oppIndex)
-
-        for oppIndex in opponents:
-            if gameState.getAgentState(oppIndex).getPosition() <= 3:
-                return self.alphaBetaSearch(gameState, 3, self.index, 0)
+        for a in self.agents:
+            if a != self.index:
+                if gameState.getAgentState(a).getPosition() <= 3:
+                    return self.alphaBetaSearch(gameState, 3, self.index, 0)
         
         self.inference1.observe(gameState)
         self.inference1.elapseTime()
@@ -1175,15 +1176,15 @@ class FoodGreedyDummyAgent(CaptureAgent):
         return bestAction  # basically, a complicated argmax
 
     def evaluationFunction(self, gameState):
-        opponents = self.getOpponents(gameState)
-        for oppIndex in opponents:
-            print oppIndex
+        visibleOpponents = []
+        for opp in self.getOpponents(gameState):
+            if gameState.getAgentPosition(opp):
+                visibleOpponents.append(opp)
         myPos = gameState.getAgentState(self.index).getPosition()
-        print myPos
         isPacman = gameState.getAgentState(self.index).isPacman
         oppDistances = []
         score = 0
-        for oppIndex in opponents:
+        for oppIndex in visibleOpponents:
             oppState = gameState.getAgentState(oppIndex)
             oppPos = oppState.getPosition()
             print oppPos
