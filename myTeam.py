@@ -946,6 +946,11 @@ class FoodGreedyDummyAgent(CaptureAgent):
     Picks among actions randomly.
     """
         '''INFERENCE'''
+        opponents = self.getOpponents(gameState)
+        for oppIndex in opponents:
+            if gameState.getAgentState(oppIndex).getPosition() <= 3:
+                return self.alphaBetaSearch(gameState, 3, self.index, 0)
+        
         self.inference1.observe(gameState)
         self.inference1.elapseTime()
         beliefs1 = self.inference1.getBeliefDistribution()
@@ -1057,4 +1062,132 @@ class FoodGreedyDummyAgent(CaptureAgent):
 
         # middle x distance > x distance of pos - x distance of initial pos
         return self.mid > abs(x - x1)
+
+    def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+        """
+        Represents MAX's turn. Returns the value of the best action
+        PARAM:
+        gameState
+        d - current depth, or "round of play". starts at depth 1, limit is self.depth
+        agentIndex - in this implementation, MAX can only be our agent.
+        NOTE: If we wanted to include our teammate as the other MAX player,
+        this method would need to be slightly changed
+        currTurn - In this implementation, currTurn in this method is always 0.
+        This is because our agent's turn is always first.
+        alpha, beta - for pruning
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+        if d > self.depth:  # max depth exceeded
+            return self.evaluationFunction(gameState)
+
+        v = float("-inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1]  # whose turn is next
+            v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta)))
+            if v > beta:
+                # prune
+                return v
+            alpha = max(alpha, v)
+        return v
+
+    def minValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+        """
+        Represents MIN's turn. Returns the value of the best action
+        PARAM:
+        gameState
+        d - current depth, or "round of play". starts at depth 1, limit is self.depth
+        agentIndex - player whose turn it is right now. Can be any of MAX's opponents
+        currTurn - currTurn + 1 is used to determine who's playing next
+        alpha, beta - for pruning
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+        if d > self.depth:
+            return self.evaluationFunction(gameState)
+
+        v = float("inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        if currTurn == self.turns - 1:
+            # if last Agent of ply, call maxAgent to play
+            nextTurn = 0
+            nextAgentIndex = self.agents[nextTurn]  # whose turn it is next
+            for action in legalActions:
+                v = min(v,
+                        self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn,
+                                      alpha, beta))
+                if v < alpha:
+                    # prune
+                    return v
+                beta = min(beta, v)
+            return v
+
+        # else, call another minAgent to play
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1]
+            v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta)))
+            if v < alpha:
+                # prune
+                return v
+            beta = min(beta, v)
+        return v
+
+    def alphaBetaSearch(self, gameState, d, agentIndex, currTurn):
+        """
+        Runs alpha-beta-search algorithm. Starts with MAX player.
+        PARAM:
+        gameState
+        d - current depth, set to 0
+        agentIndex - player whose turn it is right now; to start, our agent's index
+        currTurn - current Turn, starts with 0
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+
+        alpha = float("-inf")
+        beta = float("inf")
+        v = float("-inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        previousV = float("-inf")  # used for comparisons in determining the bestAction
+        bestAction = None
+        for action in legalActions:
+            if currTurn < len(self.agents) - 1:
+                nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
+                v = max(v,
+                        self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta))
+                if v > previousV:
+                    # compares every action value to return the best Action
+                    bestAction = action
+                if v >= beta:
+                    return bestAction
+                alpha = max(alpha, v)
+                previousV = v
+        return bestAction  # basically, a complicated argmax
+
+    def evaluationFunction(self, gameState):
+        opponents = self.getOpponents(gameState)
+        myPos = gameState.getAgentState(self.index).getPosition()
+        isPacman = gameState.getAgentState(self.index).isPacman
+        oppDistances = []
+        score = 0
+        for oppIndex in opponents:
+            oppState = gameState.getAgentState(oppIndex)
+            oppPos = oppState.getPosition()
+            score += 3 * oppState.scaredTimer
+            oppDistances.append(self.distancer.getDistance(myPos, oppPos))
+        if not isPacman:
+            score += 100
+        score += 5 * sum(oppDistances)
+        return score
+        
+
+        
+
+        
+
+        
 
