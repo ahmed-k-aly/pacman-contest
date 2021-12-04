@@ -946,16 +946,23 @@ class FoodGreedyDummyAgent(CaptureAgent):
     Picks among actions randomly.
     """
         '''INFERENCE'''
-        # agents for Minimax
+        myPos = gameState.getAgentState(self.index).getPosition()
+        # agents that will be playing minimax
         self.agents = [self.index]
+        
+        # Adds all visible opponents to minimax
         for opp in self.getOpponents(gameState):
             if gameState.getAgentPosition(opp):
                 self.agents.append(opp)
-        opponents = self.getOpponents(gameState)
 
+        # number of turns in each minimax round
+        self.turns = len(self.agents)
+
+        # if there is any opponent that's less than or equal to 3 mazeDistances away, run minimax
         for a in self.agents:
             if a != self.index:
-                if gameState.getAgentState(a).getPosition() <= 3:
+                aPos = gameState.getAgentState(a).getPosition()
+                if self.distancer.getDistance(myPos, aPos) <= 3:
                     return self.alphaBetaSearch(gameState, 3, self.index, 0)
         
         self.inference1.observe(gameState)
@@ -1176,23 +1183,25 @@ class FoodGreedyDummyAgent(CaptureAgent):
         return bestAction  # basically, a complicated argmax
 
     def evaluationFunction(self, gameState):
+        # registers all visible Opponents
         visibleOpponents = []
         for opp in self.getOpponents(gameState):
             if gameState.getAgentPosition(opp):
                 visibleOpponents.append(opp)
+
         myPos = gameState.getAgentState(self.index).getPosition()
         isPacman = gameState.getAgentState(self.index).isPacman
         oppDistances = []
-        score = 0
+        score = 0 # the score for the state we will return
+
         for oppIndex in visibleOpponents:
             oppState = gameState.getAgentState(oppIndex)
             oppPos = oppState.getPosition()
-            print oppPos
-            score += 3 * oppState.scaredTimer
+            score += 3 * oppState.scaredTimer # scared Timer for each ghost, scaled by 3
             oppDistances.append(self.distancer.getDistance(myPos, oppPos))
         if not isPacman:
-            score += 100
-        score += 5 * sum(oppDistances)
+            score += 100 # prioritize going to the home base
+        score += 5 * sum(oppDistances) # sum of the distances of each visible opponent, scaled by 5
         return score
         
 
