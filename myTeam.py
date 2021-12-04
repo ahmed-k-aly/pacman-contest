@@ -27,7 +27,7 @@ import math
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first='HuntFoodDummyAgent', second='HuntGhostDummyAgent'):
+               first='FoodGreedyDummyAgent', second='HuntGhostDummyAgent'):
     """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -157,6 +157,7 @@ class Inference:
         counter.normalize()
         return counter
 
+
 class HuntGhostDummyAgent(CaptureAgent):
     '''
         AGENT TO SERIALLY BUST GHOSTS
@@ -240,6 +241,19 @@ class HuntGhostDummyAgent(CaptureAgent):
         return legalPositionsAsList
 
     def chooseAction(self, gameState):
+        '''INFERENCE'''
+
+        self.inference1.observe(gameState)
+        self.inference1.elapseTime()
+        beliefs1 = self.inference1.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[0]] = beliefs1
+
+        self.inference2.observe(gameState)
+        self.inference2.elapseTime()
+
+        beliefs2 = self.inference2.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[1]] = beliefs2
+
         self.agents = [self.index]
         for opp in self.getOpponents(gameState):
             if gameState.getAgentPosition(opp):
@@ -262,20 +276,7 @@ class HuntGhostDummyAgent(CaptureAgent):
         return self.huntGhostAction(gameState)
 
     def huntGhostAction(self, gameState):
-        '''INFERENCE'''
-
-        self.inference1.observe(gameState)
-        self.inference1.elapseTime()
-        beliefs1 = self.inference1.getBeliefDistribution()
-        self.beliefsCounter[self.opponents[0]] = beliefs1
-
-        self.inference2.observe(gameState)
-        self.inference2.elapseTime()
-
-        beliefs2 = self.inference2.getBeliefDistribution()
-        self.beliefsCounter[self.opponents[1]] = beliefs2
-        beliefsList = [beliefs1, beliefs2]
-        self.displayDistributionsOverPositions(beliefsList)
+        # self.displayDistributionsOverPositions(beliefsList)
 
         # is in home territory
         # our scared timer is off
@@ -447,8 +448,9 @@ class HuntGhostDummyAgent(CaptureAgent):
         for action in legalActions:
             if currTurn < len(self.agents) - 1:
                 nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
-                v = max(v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
-                                         alpha, beta))
+                v = max(v,
+                        self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta))
                 if v > previousV:
                     # compares every action value to return the best Action
                     bestAction = action
@@ -457,7 +459,6 @@ class HuntGhostDummyAgent(CaptureAgent):
                 alpha = max(alpha, v)
                 previousV = v
         return bestAction  # basically, a complicated argmax
-
 
 
 class HuntFoodDummyAgent(CaptureAgent):
@@ -545,6 +546,21 @@ class HuntFoodDummyAgent(CaptureAgent):
         return legalPositionsAsList
 
     def chooseAction(self, gameState):
+
+        '''INFERENCE'''
+
+        self.inference1.observe(gameState)
+        self.inference1.elapseTime()
+        beliefs1 = self.inference1.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[0]] = beliefs1
+
+        self.inference2.observe(gameState)
+        self.inference2.elapseTime()
+
+        beliefs2 = self.inference2.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[1]] = beliefs2
+        beliefsList = [beliefs1, beliefs2]
+
         self.agents = [self.index]
         agent_state = gameState.getAgentState(self.index)
         pacman_pos = agent_state.getPosition()
@@ -552,20 +568,19 @@ class HuntFoodDummyAgent(CaptureAgent):
         for opp in self.getOpponents(gameState):
             # get agent state
             opp_state = gameState.getAgentState(opp)
+            # we can see opponent, we are pacman, and the scared timer is on
             if gameState.getAgentPosition(opp) and agent_state.isPacman and opp_state.scaredTimer <= 0:
-                # distance is less than three
                 self.agents.append(opp)
                 # append distance
                 min_dist_to_opponent.append(self.distancer.getDistance(pacman_pos, opp_state.getPosition()))
 
-        dist_to_opponent = 3 if not min_dist_to_opponent else min(min_dist_to_opponent)
-
+        dist_to_opponent = 2 if not min_dist_to_opponent else min(min_dist_to_opponent)
 
         '''IF WE ARE IN DANGER OR WE'VE COLLECTED HALF THE FOOD, START GOING HOME'''
         food_matrix = self.getFood(gameState)
         food_list = food_matrix.asList()
         remaining_food = [(x, y) for x, y in food_list if food_matrix[x][y]]
-        food_ratio = 0.25 * len(remaining_food)
+        acceptable_food_ratio = 0.25 * len(remaining_food)
         # print len(remaining_food)
         # if we are in home territory, reset food to 0
         if self.isInHomeTerritory(pacman_pos):
@@ -576,18 +591,28 @@ class HuntFoodDummyAgent(CaptureAgent):
         # offense
         # 1. we've eaten enough food and we good, go home
         # 2. if we have food in us, and there's an agent nearby
-        if self.foodEaten >= math.ceil(food_ratio) or self.foodEaten >= 0 and len(self.agents) > 1:
-            # go home, how minimize the distance between (xPacmanPos - xHomePos)
-            return self.goHome(gameState)
+        # if self.foodEaten >= math.ceil(acceptable_food_ratio) or self.foodEaten >= 0 and len(self.agents) > 1:
+        #     # go home, how minimize the distance between (xPacmanPos - xHomePos)
+        #     return self.goHome(gameState)
 
+        if self.foodEaten <= math.ceil(acceptable_food_ratio) and len(self.agents) == 1:
+            return self.huntFoodAction(gameState)
 
-        if agent_state.isPacman and len(self.agents) > 1 and dist_to_opponent < 3:
-            self.turns = len(self.agents)  # number of turns for each depth of a-b-search
-            currTurn = 0
-            agentIndex = self.agents[currTurn]
-            return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
+        #if agent_state.isPacman and len(self.agents) > 1 and dist_to_opponent < 2:
+        self.turns = len(self.agents)  # number of turns for each depth of a-b-search
+        currTurn = 0
+        agentIndex = self.agents[currTurn]
+        return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
 
-        return self.huntFoodAction(gameState)
+        # return self.alphaBetaSearch(gameState)
+
+        # if agent_state.isPacman and len(self.agents) > 1 and dist_to_opponent < 2:
+        #     self.turns = len(self.agents)  # number of turns for each depth of a-b-search
+        #     currTurn = 0
+        #     agentIndex = self.agents[currTurn]
+        #     return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
+        #
+        # # return self.huntFoodAction(gameState)
 
     def goHome(self, gameState):
 
@@ -608,25 +633,10 @@ class HuntFoodDummyAgent(CaptureAgent):
             dist_to_initial_pos = self.distancer.getDistance(new_pos, self.initialAgentPos)
             action_home_dist.append((action, dist_to_initial_pos))
 
-
         return min(action_home_dist, key=itemgetter(1))[0]
 
-
     def huntFoodAction(self, gameState):
-        '''INFERENCE'''
-
-        self.inference1.observe(gameState)
-        self.inference1.elapseTime()
-        beliefs1 = self.inference1.getBeliefDistribution()
-        self.beliefsCounter[self.opponents[0]] = beliefs1
-
-        self.inference2.observe(gameState)
-        self.inference2.elapseTime()
-
-        beliefs2 = self.inference2.getBeliefDistribution()
-        self.beliefsCounter[self.opponents[1]] = beliefs2
-        beliefsList = [beliefs1, beliefs2]
-        self.displayDistributionsOverPositions(beliefsList)
+        #self.displayDistributionsOverPositions(beliefsList)
 
         # is in home territory
         # our scared timer is off
@@ -706,23 +716,45 @@ class HuntFoodDummyAgent(CaptureAgent):
 
     def evaluationFunction(self, gameState):
         agent_state = gameState.getAgentState(self.index)
-        is_agent_pacman = agent_state.isPacman
         pacman_pos = agent_state.getPosition()
         # need a much better evaluation function for this Agent to perform decently
         # TODO: REPLACE ME
         opponents = self.getOpponents(gameState)
-        # for each opponent
-        totalNoisyDistance = 0
-        for oppIndex in opponents:
-            opp_state = gameState.getAgentState(oppIndex)
-            # get the supposed agent index
-            opp_position = opp_state.getPosition()
-            # check if our reading returned anything
-            if opp_position:
-                # get the noisy distance from that position
-                noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
-                totalNoisyDistance += (noisy_distance)
-        return -totalNoisyDistance
+        # for each food
+        # 1. calculate distance between pacman and the food item
+        # 2. calculate distance between ghost and the food item (use belief.argMax()) if we can't see the ghost
+        # check if we have food nearby
+        food_positions = self.getFood(gameState)  # list of game states: self.getFood(gameState).asList()
+        food_list = food_positions.asList()
+        # pacman_to_food / min_ghost_to_food
+        food_distances_ratio = []
+        # calculate distance to food
+        for food in food_list:
+            # distance from pacman to the food
+            food_distance_from_pacman = self.distancer.getDistance(pacman_pos, food)  # distance to food
+            # distance from food to ghost
+            # for each opponent, calculate distance to ghost (use the min distance)
+            food_to_opp_distances = []
+            for oppIndex in opponents:
+                opp_to_food_distance = 0
+                opp_state = gameState.getAgentState(oppIndex)
+                # get the supposed agent index
+                opp_position = opp_state.getPosition()
+                # check if our reading returned anything
+                if opp_position and opp_state.scaredTimer > 0:
+                    # we can see opponent, calculate distance between opponent and food
+                    opp_to_food_distance = self.distancer.getDistance(opp_position, food)
+                    food_to_opp_distances.append(opp_to_food_distance)
+                else:
+                    # we cant see ghost, our highest belief and the food
+                    opp_to_food_distance = self.distancer.getDistance(self.beliefsCounter[oppIndex].argMax(), food)
+                    food_to_opp_distances.append(opp_to_food_distance)
+            min_opp_to_food = min(food_to_opp_distances)
+            food_distances_ratio.append(food_distance_from_pacman/min_opp_to_food)
+
+            return max(food_distances_ratio)
+
+
 
     def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
         """
@@ -828,3 +860,201 @@ class HuntFoodDummyAgent(CaptureAgent):
                 alpha = max(alpha, v)
                 previousV = v
         return bestAction  # basically, a complicated argmax
+
+
+
+class FoodGreedyDummyAgent(CaptureAgent):
+    """
+    A Dummy agent to serve as an example of the necessary agent structure.
+    You should look at baselineTeam.py for more details about how to
+    create an agent as this is the bare minimum.
+    """
+
+    def registerInitialState(self, gameState):
+        """
+    This method handles the initial setup of the
+    agent to populate useful fields (such as what team
+    we're on).
+    A distanceCalculator instance caches the maze distances
+    between each pair of positions, so your agents can use:
+    self.distancer.getDistance(p1, p2)
+    IMPORTANT: This method may run for at most 15 seconds.
+    """
+
+        '''
+    Make sure you do not delete the following line. If you would like to
+    use Manhattan distances instead of maze distances in order to save
+    on initialization time, please take a look at
+    CaptureAgent.registerInitialState in captureAgents.py.
+    '''
+        CaptureAgent.registerInitialState(self, gameState)
+
+        '''
+    Your initialization code goes here, if you need any.
+    '''
+
+        # initial agent pos
+        self.initialAgentPos = gameState.getInitialAgentPosition(self.index)
+        # get opponents initial jail pos
+        opponents = self.getOpponents(gameState)
+        self.opponent_jail_pos = [gameState.getInitialAgentPosition(opponents[i]) for i in range(len(opponents))]
+        # counter to initialize probability of being eaten in a state.
+        opponent_probability = util.Counter()
+        # legal positions our pacman could occupy
+        legal_positions = [pos for pos in gameState.getWalls().asList(False) if pos[1] > 1]
+        self.legal_positions = legal_positions
+        # initialize extra for jail positions (places where we have ghosts)
+        for pos in self.opponent_jail_pos:
+            opponent_probability[pos] += 2
+            legal_positions.remove(pos)
+
+        # initialize probability of opponent position uniformly elsewhere
+        for pos in legal_positions:
+            opponent_probability[pos] += 1
+        opponent_probability.normalize()
+
+
+        self.opponent_position_distribution = opponent_probability
+
+        # limit of food we're defending
+        self.foodEaten = 0
+
+        # calculate the mid pos of the board
+        xOpp, YOpp = min(self.opponent_jail_pos)
+        xInit, YInit = self.initialAgentPos
+        self.mid = abs(xOpp - xInit)
+
+
+        self.beliefsCounter = util.Counter()
+        self.opponents = self.getOpponents(gameState)
+
+        self.legal_positions = legal_positions
+        num_partices = 400
+        self.inference1 = Inference(gameState, self.index, opponents[0], num_partices)
+        self.inference1.initializeUniformly()
+        self.inference2 = Inference(gameState, self.index, opponents[1], num_partices)
+        self.inference2.initializeUniformly()
+
+        self.beliefsCounter[self.opponents[0]] = self.inference1.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[1]] = self.inference2.getBeliefDistribution()
+
+        # for alpha-beta pruning
+        self.depth = 2
+
+    def chooseAction(self, gameState):
+        """
+    Picks among actions randomly.
+    """
+        '''INFERENCE'''
+        self.inference1.observe(gameState)
+        self.inference1.elapseTime()
+        beliefs1 = self.inference1.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[0]] = beliefs1
+
+        self.inference2.observe(gameState)
+        self.inference2.elapseTime()
+
+        beliefs2 = self.inference2.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[1]] = beliefs2
+        '''
+                PICK AN ACTION
+        '''
+        agent_state = gameState.getAgentState(self.index)
+        pacman_pos = agent_state.getPosition()
+        num_carrying = agent_state.numCarrying
+
+        actions = gameState.getLegalActions(self.index)
+        # check if we're in home territory
+        # get pacman pos
+        isOffense = gameState.getAgentState(self.index).isPacman
+        # food list
+        food_matrix = self.getFood(gameState)
+        food_list = food_matrix.asList()
+        remaining_food = [(x, y) for x, y in food_list if food_matrix[x][y]]
+        food_ratio = 0.25 * len(remaining_food)
+        #print len(remaining_food)
+        # we are in home territory
+        if num_carrying < math.ceil(food_ratio):
+            return self.huntFoodAction(gameState, actions)
+        else:
+            return self.goHome(gameState)
+
+    def huntFoodAction(self, gameState, actions):
+        # TODO:
+        #  1. replace with A-star search
+        #  2. avoid ghosts.
+        #  3. predict position of ghosts.
+        # food action pairs
+        action_food_distance_list = []
+        # for each action
+        for action in actions:
+            '''
+                SUCCESSOR STATE AND ALL IT HAS TO OFFER US (FOOD LIST, AGENT POSITION)
+            '''
+            # get the successor state (state after which agent takes an action)
+            successor_state = gameState.generateSuccessor(self.index, action)
+            # food list pacman is supposed to choose.
+            successor_foodList = self.getFood(successor_state).asList()
+            # get the agent state (AgentState instance let's us get position of agent)
+            agent_state = successor_state.getAgentState(self.index)
+            # access the position using agent position
+            new_agent_position = agent_state.getPosition()
+
+            '''
+                    FOOD DISTANCES TO DETERMINE OUR ACTION
+            '''
+
+            # check if we have food nearby
+            food_positions = self.getFood(gameState)  # list of game states: self.getFood(gameState).asList()
+            food_list = food_positions.asList()
+            # EAT FOOD IF NEARBY
+            if new_agent_position in food_list:
+                self.foodEaten += 1
+                return action
+            # list storing food distances
+            food_distances = []
+            # loop to get distance of all the food's in action
+            for food in successor_foodList:
+                # calculate the distance between food and position of pacman after action and food.
+                distance = self.distancer.getDistance(food, new_agent_position)
+                # add to list of food distances
+                food_distances.append(distance)
+            # action and distance to nearest food list
+            action_food_distance = (action, min(food_distances))
+            # all legal actions (action, food distance) list
+            action_food_distance_list.append(action_food_distance)
+
+        if not action_food_distance_list:
+            "Oops, We can't take any action"
+            return None
+        return min(action_food_distance_list, key=itemgetter(1))[0]
+
+
+    def goHome(self, gameState):
+
+        # get actions
+        actions = gameState.getLegalActions(self.index)
+        action_home_dist = []
+
+        for action in actions:
+            '''
+                successor state and all it has to offer
+            '''
+            # get the successor state (state after which agent takes an action)
+            successor_state = gameState.generateSuccessor(self.index, action)
+            # get the agent state (AgentState instance let's us get position of agent)
+            agent_state = successor_state.getAgentState(self.index)
+            # access the position using agent position
+            new_pos = agent_state.getPosition()
+            dist_to_initial_pos = self.distancer.getDistance(new_pos, self.initialAgentPos)
+            action_home_dist.append((action, dist_to_initial_pos))
+
+        return min(action_home_dist, key=itemgetter(1))[0]
+
+    def isInHomeTerritory(self, pos):
+        x, y = pos
+        x1, y1 = self.initialAgentPos
+
+        # middle x distance > x distance of pos - x distance of initial pos
+        return self.mid > abs(x - x1)
+
