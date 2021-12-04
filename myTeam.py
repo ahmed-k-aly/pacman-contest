@@ -17,13 +17,14 @@ import random, time, util
 from game import Actions, Directions
 import game
 from operator import itemgetter
+import math
 
 #################
 # Team creation #
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'OffensiveAgent', second = 'DefensiveAgent'):
+               first = 'OffensiveAgent', second = 'OffensiveAgent'):
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -46,6 +47,15 @@ def createTeam(firstIndex, secondIndex, isRed,
 # Agents #
 ##########
 
+class DummyAgent(CaptureAgent):
+  def registerInitialState(self, gameState):
+        
+    CaptureAgent.registerInitialState(self, gameState)
+  
+  def chooseAction(self, gameState):
+    actions = gameState.getLegalActions(self.index)
+    return random.choice(actions)  
+    
 class OffensiveAgent(CaptureAgent):
   """
   A Dummy agent to serve as an example of the necessary agent structure.
@@ -73,12 +83,19 @@ class OffensiveAgent(CaptureAgent):
     CaptureAgent.registerInitialState in captureAgents.py.
     '''
     CaptureAgent.registerInitialState(self, gameState)
-    opp = self.getOpponents(gameState)
-    self.inference1 = Inference(gameState, self.index, opp[0], 400)
+    self.opponents = self.getOpponents(gameState)
+    self.beliefsCounter = util.Counter()
+    self.inference1 = Inference(gameState, self.index, self.opponents[0], 50)
     self.inference1.initializeUniformly()
-    self.inference2 = Inference(gameState, self.index, opp[1],400)
+    self.inference2 = Inference(gameState, self.index, self.opponents[1],50)
     self.inference2.initializeUniformly()
     
+    self.beliefsCounter[self.opponents[0]] = self.inference1.getBeliefDistribution() 
+    self.beliefsCounter[self.opponents[1]] = self.inference2.getBeliefDistribution()
+    self.maxFood = len(self.getFood(gameState).asList())
+    self.numFoodCarrying = 0
+    self.furthestFoodDistance = self.distanceToExtremeFood(gameState, self.getFood(gameState).asList(), False)
+
     '''
     Your initialization code goes here, if you need any.
     '''
@@ -89,15 +106,16 @@ class OffensiveAgent(CaptureAgent):
     
     """
     
-    self.inference1.observe(gameState)
-    self.inference1.elapseTime()
-    beliefs1 = self.inference1.getBeliefDistribution()
+    self.inference1.observe(gameState) # observe location of opponent 1
+    self.inference1.elapseTime() 
+    self.beliefsCounter[self.opponents[0]] = self.inference1.getBeliefDistribution() # updates belief distribution for opponent 1
 
-    self.inference2.observe(gameState)
+    self.inference2.observe(gameState) # observe location of opponent 2
     self.inference2.elapseTime()
-    beliefs2 = self.inference2.getBeliefDistribution()
-    beliefsList = [beliefs1, beliefs2]
-    self.displayDistributionsOverPositions(beliefsList)
+    self.beliefsCounter[self.opponents[1]] = self.inference2.getBeliefDistribution() # updates belief distribution for opponent 2
+
+    beliefs = [self.beliefsCounter[self.opponents[0]], self.beliefsCounter[self.opponents[1]]]
+    #self.displayDistributionsOverPositions(beliefs)
     actions = gameState.getLegalActions(self.index)
 
     '''
@@ -106,46 +124,122 @@ class OffensiveAgent(CaptureAgent):
     surroundingState = util.Counter()
     for action in actions:
       newGameState = gameState.generateSuccessor(self.index, action)
-      newPacManPos = newGameState.getAgentPosition(self.index)
-      distances_to_ghosts = []
-      #for belief in beliefsList:
-      max_prob = beliefs1.argMax()
-      # get the distance to max probability
-      distance = self.distancer.getDistance(newPacManPos, max_prob)
-      # add to list of distance
-      surroundingState[action] = -distance
-      distances_to_ghosts.append((action, distance))
-    return surroundingState.argMax()
-    return min(distances_to_ghosts, key=itemgetter(1))[0]
       
-    #   stateValue = self.computeStateValue(newGameState)
-    #   for i in self.getOpponents(gameState):
-    #     if self.agentState(gameState,self.index) == "Pacman" and self.getEnemyDistance(gameState,i) == 1 and self.agentState(newGameState,self.index) == "Ghost":
-    #       return action
-    #   print("Action, StateValue = {}, {}".format(action, stateValue))
-    #   surroundingState[action] = stateValue
-      
-    # return surroundingState.argMax()
+      stateValue = self.computeStateValue(newGameState)
+      if self.agentState(gameState,self.index) == "Pacman" and (self.getEnemyDistance(gameState,self.opponents[0]) == 1 or self.getEnemyDistance(gameState,self.opponents[1]) == 1) and self.agentState(newGameState,self.index) == "Ghost":
+        continue
+      print("Action, StateValue = {}, {}".format(action, stateValue))
+      surroundingState[action] = stateValue
+    action = surroundingState.argMax() # action to return
+    
+    gameState = gameState.generateSuccessor(self.index, action) # the new game state
+    currFood = self.getFood(gameState) # new food
+    previousGameState = self.getPreviousObservation() # the previousGameState
+    if previousGameState == None: 
+      return action
+    prevFood = self.getFood(previousGameState) # the old food
+    x,y = gameState.getAgentPosition(self.index) # my curr location
+    if prevFood[x][y] and not currFood[x][y]:
+      self.numFoodCarrying += 1
+    myState = self.agentState(gameState,self.index)
+    if myState == "Ghost":
+      self.numFoodCarrying = 0
+    return action
 
 
   def computeStateValue(self, gameState):
       '''  
       An Evaluation Function. Override it in other Agents. 
       '''
+      stateValue = 0
       numFoodLeft = len(self.getFood(gameState).asList())
       # Linear combination of distance to food, an enemy function, and num foods left with the opponent
-      stateValue = -self.distanceToExtremeFood(gameState,self.getFood(gameState).asList()) + (100*self.ghostFunction(gameState)) - 100*numFoodLeft 
-      if numFoodLeft <= 10: 
-        # run to base
-        myFood = self.getFoodYouAreDefending(gameState).asList()
-        closestFoodBase = self.distanceToExtremeFood(gameState,myFood)
-        stateValue = -closestFoodBase 
+      stateValue += (1*self.ghostFunction(gameState, False)) 
+      stateValue += 1*self.distanceToFoodFeature(gameState)
+      #stateValue += 1*self.numWallsNearbyFeature(gameState)
+      #stateValue += 10.0*self.numFoodLeftToAttackFeature(gameState)
+      if self.numFoodCarrying > 5:
+        stateValue += 10000000 * self.distanceToMyClosestFoodFeature(gameState)
+      
+      
       return stateValue
 
-  def ghostFunction(self, gameState):
+
+  def distanceToMyClosestFoodFeature(self, gameState):
+    distance = self.distanceToExtremeFood(gameState, self.getFoodYouAreDefending(gameState).asList())
+    return 1.0/distance
+  
+  
+  def numFoodCarryingFeature(self, gameState):
+    return self.numFoodCarrying
+  
+  def numFoodLeftToDefendFeature(self, gameState):
+    return len(self.getFood(gameState).asList()) / float(self.maxFood)
+  
+  
+  def numWallsNearbyFeature(self, gameState):
+    ''' Returns a value between 0 and 1 relative
+        to how many walls are nearby
+    '''
+    x,y = gameState.getAgentPosition(self.index)
+    northWall = gameState.getWalls()[x][y+1]
+    southWall = gameState.getWalls()[x][y-1]
+    westWall = gameState.getWalls()[x+1][y]
+    eastWall = gameState.getWalls()[x-1][y]
+    lengthWalls = int(northWall) + int(southWall) + int(eastWall) + int(westWall)
+    return 1.0/ (lengthWalls+1)
+  
+  
+  def numFoodLeftToAttackFeature(self,gameState):
+    ''' Returns a value between 0-1 of how many foods left to attack'''
+    return 1.0 / pow(10,len(self.getFood(gameState).asList()))
+  
+  def distanceToFoodFeature(self, gameState):
+    '''  
+    Returns how good the current state is relative to
+    the distance of the food
+    '''
+    currFood = self.getFood(gameState)
+    previousGameState = self.getPreviousObservation()
+    if previousGameState is not None:
+      prevFood = self.getFood(previousGameState)
+      x,y = gameState.getAgentPosition(self.index)
+      if prevFood[x][y] and not currFood[x][y]:
+        self.numFoodCarrying += 1
+        return 1.0
+    return 100.0/math.log((1+self.distanceToExtremeFood(gameState,currFood.asList())))
+
+
+  def ghostFunction(self, gameState, isDefensive):
     ''' 
     Evaluates the state relative to the agents of the opponents.
     Returns a value from 0-1 based on how good the current state is
+    relative only to ghosts
+    '''
+    #TODO: Method for power pellets logic
+    #TODO: Make logic for when we're scared ghost and opponent is PACMAN
+    #TODO: Make logic for when we're PACMAN and opponent is scared ghost
+    
+    enemyIndices = self.getOpponents(gameState)
+    enemyDistances = util.Counter()
+    enemiesStates = util.Counter()
+    utilityEstimate = {} # how scared am I from each opponent
+    myState = self.agentState(gameState, self.index)
+    for i in enemyIndices:
+      utilityEstimate[i] = 0
+      enemyDistances[i] = self.getEnemyDistance(gameState, i)
+      enemiesStates[i] = self.agentState(gameState, i)
+    for i in enemyIndices:
+      if enemiesStates[i] == "Ghost":
+        utilityEstimate[i] = 3*math.log(1+enemyDistances[i])
+      # TODO: add power pellet logic
+    return min(utilityEstimate.values())
+
+
+  def ghostsFunction(self, gameState, isDefensive):
+    ''' 
+    Evaluates the state relative to the agents of the opponents.
+    Returns a value from based on how good the current state is
     relative only to ghosts
     '''
     #TODO: Method for power pellets logic
@@ -209,12 +303,10 @@ class OffensiveAgent(CaptureAgent):
     Returns Enemy distance if within our range. Else, return None
     '''
     myPos = gameState.getAgentPosition(self.index)
-    enemyPos =  gameState.getAgentPosition(enemyIndex)
-    if myPos and enemyPos != None:
-      distance = self.getMazeDistance(myPos,enemyPos)
-      return distance
-    return None
-  
+    enemyPos = self.beliefsCounter[enemyIndex].argMax()
+    distance = self.getMazeDistance(myPos,enemyPos)
+    return distance
+    
 class DefensiveAgent(OffensiveAgent):
 
 
@@ -223,9 +315,20 @@ class DefensiveAgent(OffensiveAgent):
 
   def computeStateValue(self, gameState):
       # Linear combination of distance to food, an enemy function, and num foods left with the opponent
-      stateValue = -self.distanceToExtremeFood(gameState,self.getFoodYouAreDefending(gameState).asList(), False) + (100*self.ghostFunction(gameState))
+      stateValue = -self.distanceToExtremeFood(gameState,self.getFoodYouAreDefending(gameState).asList(), False) + (100*self.ghostFunction(gameState, True))
       return stateValue
 
+  def computessStateValue(self, gameState):
+      '''  
+      An Evaluation Function. Override it in other Agents. 
+      '''
+      numFoodLeft = len(self.getFood(gameState).asList())
+      # Linear combination of distance to food, an enemy function, and num foods left with the opponent
+      stateValue = -100*self.distanceToExtremeFood(gameState,self.getFood(gameState).asList()) + (10*self.ghostFunction(gameState, True)) - 100*numFoodLeft 
+      
+      return stateValue
+
+        
 class Inference():
   def __init__(self, gameState, index, opponentIndex, numParticles = 600):
     #TODO: Use info from both my agents to infer 
@@ -259,9 +362,14 @@ class Inference():
       numParticlesPerPosition = self.numParticles//numLegalPositions
       # for each position, assign numParticles/numLegalPositions particles
       self.particleList = []
-      for position in self.legalPositions:
-          particle = position
-          self.particleList += [particle] * numParticlesPerPosition
+      i = 0
+      while i <= self.numParticles:
+        self.particleList += self.legalPositions
+        i += len(self.legalPositions)
+      
+      # for position in self.legalPositions:
+      #     particle = position
+      #     self.particleList += [particle] * numParticlesPerPosition
 
   def observe(self, gameState):
         agentIndex = self.opponentIndex
@@ -277,7 +385,7 @@ class Inference():
         for particle in self.particleList: # loop over all legal positions
             trueDistance = util.manhattanDistance(particle, myPosition)
             if gameState.getDistanceProb(trueDistance, noisyDistance) > 0:
-                allPossible[particle] = beliefs[particle] * gameState.getDistanceProb(trueDistance, noisyDistance) #  updates belief value for a position
+              allPossible[particle] = beliefs[particle] * gameState.getDistanceProb(trueDistance, noisyDistance) #  updates belief value for a position
         allPossible.normalize()
         beliefs = allPossible # update the new belief state
         if beliefs.totalCount() == 0: # if all weights are zero, initialize from the prior
@@ -337,6 +445,86 @@ class Inference():
 
 
 
+
+
+
+
+
+
+class JointParticleFilter(Inference):
+  
+  def __init__(self, opponents):
+    self.opponents = opponents
+    
+  def initializeParticles(self):
+    numLegalPositions = (len(self.legalPositions))^(self.numGhosts)
+    numParticlesPerPosition = self.numParticles//numLegalPositions
+    # for each position, assign numParticles/numLegalPositions particles
+    self.particles = []
+
+
+    # import the product function from itertools module
+    from itertools import product
+    combinationOfPositions = list(product(self.legalPositions, repeat = self.numGhosts))
+    random.shuffle(combinationOfPositions)
+    i = 0
+    while i <= self.numParticles:
+        self.particles += combinationOfPositions
+        i += len(combinationOfPositions)
+
+  
+  def observeState(self, gameState):
+    pacmanPosition = gameState.getPacmanPosition()
+    noisyDistances = gameState.getAgentDistances()
+
+    "*** YOUR CODE HERE ***"
+    beliefs = self.getBeliefDistribution() # get particles belief distribution
+    # import the product function from itertools module
+    allPositions = util.Counter() 
+    for particle in self.particles: # loop over particles
+        allPositions[particle] = beliefs[particle]
+        for i in self.opponents: # we multiply the emissionModels for each ghost seperately
+            enemyPos = gameState.getAgentPosition(self.opponents[i])
+            if enemyPos is not None:
+                temp = beliefs[particle]
+                allPositions[particle] = 0
+                particle = enemyPos
+                allPositions[particle] = temp
+                continue
+            trueDistance = util.manhattanDistance(particle[i], pacmanPosition)
+            allPositions[particle] *=gameState.getDistanceProb(trueDistance, noisyDistances[i]) #  updates belief value for a position
+    allPositions.normalize()
+    beliefs = allPositions # update the new belief state
+
+    if beliefs.totalCount() == 0: # if all weights are zero, initialize from the prior
+        self.initializeParticles() 
+        beliefs = self.getBeliefDistribution()
+
+    newParticleList = []
+    for _ in range(self.numParticles):
+        '''
+        items = sorted(beliefs.items())
+        distribution = [i[1] for i in items]
+        values = [i[0] for i in items]
+        '''
+        particle = util.sample(beliefs, []) # sample particle from the distribution
+        newParticleList.append(particle)
+    self.particles = newParticleList # update the particle list
+
+  def elapseTime(self, gameState):
+    newParticles = []
+    for oldParticle in self.particles:
+        newParticle = list(oldParticle) # A list of ghost positions
+        # now loop through and update each entry in newParticle...
+        "*** YOUR CODE HERE ***"
+        for i in range(self.numGhosts): # Loop over all ghosts
+
+            newPosDist= getPositionDistributionForGhost(setGhostPositions(gameState, newParticle), i, self.ghostAgents[i])
+            newPosi = util.sample(newPosDist) # sample a new position from the position distribution
+            newParticle[i] = newPosi # the newPosition is our new position component for the ghost indexed by i in the particle
+        "*** END YOUR CODE HERE ***"
+        newParticles.append(tuple(newParticle))
+    self.particles = newParticles
 
 
 class ApproximateQAgent(OffensiveAgent):
