@@ -946,7 +946,13 @@ class FoodGreedyDummyAgent(CaptureAgent):
     Picks among actions randomly.
     """
         '''INFERENCE'''
+        # agents for Minimax
+        self.agents = [self.index]
         opponents = self.getOpponents(gameState)
+
+        for oppIndex in opponents:
+            self.agents.append(oppIndex)
+
         for oppIndex in opponents:
             if gameState.getAgentState(oppIndex).getPosition() <= 3:
                 return self.alphaBetaSearch(gameState, 3, self.index, 0)
@@ -1170,13 +1176,17 @@ class FoodGreedyDummyAgent(CaptureAgent):
 
     def evaluationFunction(self, gameState):
         opponents = self.getOpponents(gameState)
+        for oppIndex in opponents:
+            print oppIndex
         myPos = gameState.getAgentState(self.index).getPosition()
+        print myPos
         isPacman = gameState.getAgentState(self.index).isPacman
         oppDistances = []
         score = 0
         for oppIndex in opponents:
             oppState = gameState.getAgentState(oppIndex)
             oppPos = oppState.getPosition()
+            print oppPos
             score += 3 * oppState.scaredTimer
             oppDistances.append(self.distancer.getDistance(myPos, oppPos))
         if not isPacman:
