@@ -350,8 +350,8 @@ class HuntGhostDummyAgent(CaptureAgent):
                 # get the noisy distance from that position
                 noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
                 # if noisy distance is less than 2
-                num_walls = 1 if self.num_walls[pacman_pos] == 0 else self.num_walls[pacman_pos]
-                num_walls_eval = num_walls * 100
+                # num_walls = 1 if self.num_walls[pacman_pos] == 0 else self.num_walls[pacman_pos]
+                # num_walls_eval = num_walls * 100
                 totalNoisyDistance += (noisy_distance)
         return -totalNoisyDistance
 
@@ -444,7 +444,7 @@ class HuntGhostDummyAgent(CaptureAgent):
         v = float("-inf")
         legalActions = gameState.getLegalActions(agentIndex)
         previousV = float("-inf")  # used for comparisons in determining the bestAction
-        bestAction = None
+        bestAction = Directions.STOP
         for action in legalActions:
             if currTurn < len(self.agents) - 1:
                 nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
@@ -580,7 +580,7 @@ class HuntFoodDummyAgent(CaptureAgent):
         food_matrix = self.getFood(gameState)
         food_list = food_matrix.asList()
         remaining_food = [(x, y) for x, y in food_list if food_matrix[x][y]]
-        acceptable_food_ratio = 0.25 * len(remaining_food)
+        acceptable_food_ratio = 0.1 * len(remaining_food)
         # print len(remaining_food)
         # if we are in home territory, reset food to 0
         if self.isInHomeTerritory(pacman_pos):
@@ -632,6 +632,9 @@ class HuntFoodDummyAgent(CaptureAgent):
             new_pos = agent_state.getPosition()
             dist_to_initial_pos = self.distancer.getDistance(new_pos, self.initialAgentPos)
             action_home_dist.append((action, dist_to_initial_pos))
+
+        if not action_home_dist:
+            return Directions.STOP
 
         return min(action_home_dist, key=itemgetter(1))[0]
 
@@ -705,6 +708,10 @@ class HuntFoodDummyAgent(CaptureAgent):
                 # if ghost_prob <= 0.1:
 
             action_dist_to_safe_food.append((action, min(food_distances)))
+
+        if not action_home_dist:
+            return Directions.STOP
+
         return min(action_dist_to_safe_food, key=itemgetter(1))[0]
 
     def isInHomeTerritory(self, pos):
@@ -845,7 +852,7 @@ class HuntFoodDummyAgent(CaptureAgent):
         v = float("-inf")
         legalActions = gameState.getLegalActions(agentIndex)
         previousV = float("-inf")  # used for comparisons in determining the bestAction
-        bestAction = None
+        bestAction = Directions.STOP
         for action in legalActions:
             if currTurn < len(self.agents) - 1:
                 nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
@@ -901,17 +908,8 @@ class FoodGreedyDummyAgent(CaptureAgent):
         # counter to initialize probability of being eaten in a state.
         opponent_probability = util.Counter()
         # legal positions our pacman could occupy
-        legal_positions = [pos for pos in gameState.getWalls().asList(False) if pos[1] > 1]
+        legal_positions = self.getLegalPositions(gameState)
         self.legal_positions = legal_positions
-        # initialize extra for jail positions (places where we have ghosts)
-        for pos in self.opponent_jail_pos:
-            opponent_probability[pos] += 2
-            legal_positions.remove(pos)
-
-        # initialize probability of opponent position uniformly elsewhere
-        for pos in legal_positions:
-            opponent_probability[pos] += 1
-        opponent_probability.normalize()
 
 
         self.opponent_position_distribution = opponent_probability
@@ -1004,6 +1002,9 @@ class FoodGreedyDummyAgent(CaptureAgent):
         #  2. avoid ghosts.
         #  3. predict position of ghosts.
         # food action pairs
+
+        # pacman pos
+        pacman_pos = gameState.getAgentState(self.index).getPosition()
         action_food_distance_list = []
         # for each action
         for action in actions:
@@ -1022,30 +1023,26 @@ class FoodGreedyDummyAgent(CaptureAgent):
             '''
                     FOOD DISTANCES TO DETERMINE OUR ACTION
             '''
-
-            # check if we have food nearby
             food_positions = self.getFood(gameState)  # list of game states: self.getFood(gameState).asList()
             food_list = food_positions.asList()
             # EAT FOOD IF NEARBY
             if new_agent_position in food_list:
-                self.foodEaten += 1
                 return action
-            # list storing food distances
-            food_distances = []
-            # loop to get distance of all the food's in action
-            for food in successor_foodList:
-                # calculate the distance between food and position of pacman after action and food.
-                distance = self.distancer.getDistance(food, new_agent_position)
-                # add to list of food distances
-                food_distances.append(distance)
-            # action and distance to nearest food list
-            action_food_distance = (action, min(food_distances))
+
+            # get the food rating
+            food_desirability = self.getFoodDesirabilityVals(gameState, successor_foodList, pacman_pos)
+            # calculate distance to the highest food rating
+            # food we want to eat
+            food_we_eat = food_desirability.argMax()
+            dist = self.distancer.getDistance(food_desirability.argMax(), new_agent_position)
+            print("We are " + str(dist) + " away from food " + str(food_we_eat))
+
             # all legal actions (action, food distance) list
-            action_food_distance_list.append(action_food_distance)
+            action_food_distance_list.append((action, dist))
 
         if not action_food_distance_list:
-            "Oops, We can't take any action"
-            return None
+            return Directions.STOP
+
         return min(action_food_distance_list, key=itemgetter(1))[0]
 
 
@@ -1068,7 +1065,94 @@ class FoodGreedyDummyAgent(CaptureAgent):
             dist_to_initial_pos = self.distancer.getDistance(new_pos, self.initialAgentPos)
             action_home_dist.append((action, dist_to_initial_pos))
 
+        if not action_home_dist:
+            return Directions.STOP
+
         return min(action_home_dist, key=itemgetter(1))[0]
+
+    def getFoodDesirabilityVals(self, gameState, food_list, pacman_pos):
+        '''
+            RANKS FOOD BASED ON THEIR DESIRABILITY
+                1. food close to opponent: not good (more weight perhaps)
+                2. food with less ways leave around it: not good (somewhat more weight)
+                3. food that's far from pacman: not good (tho we prefer this than the other 2)
+        '''
+        CLOSENESS_TO_OPPONENT = 1
+        OPENINGS_AROUND_FOOD = 3
+        DISTANCE_FROM_FOOD = 5
+        food_desirability = util.Counter()
+        for food in food_list:
+            # calculate the nearest opponent to the food
+            dist_to_opponents = []
+            for oppIndex in self.opponents:
+                # get opponent agent state
+                opp_agent_state = gameState.getAgentState(oppIndex)
+                # get the supposed agent index
+                opp_position = opp_agent_state.getPosition()
+                if opp_position:
+                    # if we can see opponents, calculate real distance
+                    dist = self.distancer.getDistance(food, opp_position)
+                    dist_to_opponents.append(dist)
+                else:
+                    # if we cannot see the opponent, particle filtering
+                    opp_belief = self.beliefsCounter[oppIndex]
+                    dist = self.distancer.getDistance(food, opp_belief.argMax())
+                    dist_to_opponents.append(dist)
+
+            # min dist to opponent based on that food. (divide by 10, to stabilize)
+            dist = min(dist_to_opponents) / 10
+
+            # openings for food.
+            num_openings = self.getSuccessorPositions(food)
+
+            # distance of food from pacman
+            distance_to_pacman = self.distancer.getDistance(pacman_pos, food) / 10
+            # food desirability score for this food is
+
+            food_desirability[food] = dist + len(num_openings) + distance_to_pacman
+
+
+        food_desirability.normalize()
+        for food in food_desirability:
+            food_desirability[food] *= 5
+
+
+        return food_desirability
+
+
+
+
+    def getSuccessorPositions(self, position):
+        legalPos = []
+        x, y = position
+        if (x + 1, y) in self.legal_positions:
+            legalPos.append(((x + 1), y))
+        if (x - 1, y) in self.legal_positions:
+            legalPos.append((x - 1, y))
+        if (x, y + 1) in self.legal_positions:
+            legalPos.append((x, y + 1))
+        if (x, y - 1) in self.legal_positions:
+            legalPos.append((x, y - 1))
+        return legalPos
+
+    def getLegalPositions(self, gameState):
+        '''
+        Method that returns all legal positions for a given gameState
+        #TODO: implement caching since legal positions are the same throughout the game
+        '''
+        walls = gameState.getWalls()
+        legalPositions = []
+        for line in walls:
+            row = [not a for a in line]
+            legalPositions.append(row)
+
+        legalPositionsAsList = []
+        for x in range(len(legalPositions)):
+            for y in range(len(legalPositions[x])):
+                position = (x, y)
+                if legalPositions[x][y]:
+                    legalPositionsAsList.append(position)
+        return legalPositionsAsList
 
     def isInHomeTerritory(self, pos):
         x, y = pos
