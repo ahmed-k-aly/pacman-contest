@@ -385,6 +385,51 @@ class DummyAgent(CaptureAgent):
                 alpha = max(alpha, v)
                 previousV = v
         return bestAction  # basically, a complicated argmax
+    
+    def evaluationFunction(self, gameState):
+        myPos = gameState.getAgentState(self.index).getPosition()
+        isPacman = gameState.getAgentState(self.index).isPacman
+
+        startPos = gameState.getInitialAgentPosition(self.index)
+
+        if myPos == startPos:
+            return -9999999
+        score = 0 # the score for the state we will return
+
+        # initializes a list of all visible opponents
+        visibleOpponents = []
+        for opp in self.getOpponents(gameState):
+            if gameState.getAgentPosition(opp):
+                visibleOpponents.append(opp)
+
+        # position of our agent, and determine whether we are on our side of the board
+
+        # FOOD-FEATURE: initializes a map from all nearby food to how far away they are
+        nearbyFoodDistances= {}
+        for food in self.getFood(gameState).asList():
+            distance = self.distancer.getDistance(myPos, food)
+            if distance <= 4:
+                nearbyFoodDistances[food] = distance
+        
+        oppDistances = []
+        oppScaredTimers = []
+        capsuleDistances = []
+
+        # CAPSULE-FEATURE: initializes a list of the distances of the nearest capsules
+        capsules = self.getCapsules(gameState)
+        for cap in capsules:
+            capsuleDistances.append(self.distancer.getDistance(myPos, cap))
+
+        # CLOSE-OPPONENT-FEATURE: initializes a list of the distances of all visible opponents
+        # SCARED-OPPONENT-FEATURE: initializes a list of the scared timers of all visible opponents 
+        for oppIndex in visibleOpponents:
+            oppState = gameState.getAgentState(oppIndex)
+            oppPos = oppState.getPosition()
+            oppScaredTimers.append(oppState.scaredTimer)
+            oppDistances.append(self.distancer.getDistance(myPos, oppPos))
+
+        return self.closeOppFactor(oppDistances, oppScaredTimers[0], isPacman) + self.capsuleFactor(capsuleDistances) + self.foodFactor(nearbyFoodDistances)
+
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
