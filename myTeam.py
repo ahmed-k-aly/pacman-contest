@@ -84,9 +84,9 @@ class OffensiveAgent(CaptureAgent):
     CaptureAgent.registerInitialState(self, gameState)
     self.opponents = self.getOpponents(gameState)
     self.beliefsCounter = util.Counter()
-    self.inference1 = Inference(gameState, self.index, self.opponents[0], 50)
+    self.inference1 = Inference(gameState, self.index, self.opponents[0], 400)
     self.inference1.initializeUniformly()
-    self.inference2 = Inference(gameState, self.index, self.opponents[1],50)
+    self.inference2 = Inference(gameState, self.index, self.opponents[1], 400)
     self.inference2.initializeUniformly()
     
     self.beliefsCounter[self.opponents[0]] = self.inference1.getBeliefDistribution() 
@@ -613,6 +613,27 @@ class ApproximateQAgent(OffensiveAgent):
         #self.weights.normalize()
         
 
+
+    def goHome(self, gameState, actions):
+    
+        # get actions
+        action_home_dist = []
+
+        for action in actions:
+            '''
+                successor state and all it has to offer
+            '''
+            # get the successor state (state after which agent takes an action)
+            successor_state = gameState.generateSuccessor(self.index, action)
+            # get the agent state (AgentState instance let's us get position of agent)
+            agent_state = successor_state.getAgentState(self.index)
+            # access the position using agent position
+            new_pos = agent_state.getPosition()
+            dist_to_initial_pos = self.distancer.getDistance(new_pos, self.start)
+            action_home_dist.append((action, dist_to_initial_pos))
+
+        return min(action_home_dist, key=itemgetter(1))[0]
+
     def chooseAction(self, gameState):
         self.inference1.observe(gameState) # observe location of opponent 1
         self.inference1.elapseTime() 
@@ -634,9 +655,11 @@ class ApproximateQAgent(OffensiveAgent):
           self.pastActions.append(action)
           self.flag = False
           return action
-        if self.inTraining:
-          reward = self.rewardFunction(previousGameState, gameState)
-          self.update(previousGameState,self.pastActions[-1], gameState, reward)
+        carryingThresh = 0.25 * len(self.getFood(gameState).asList())
+        if 2 < len(self.getFood(gameState).asList()) <5:
+            carryingThresh = len(self.getFood(gameState).asList()) -2
+        if gameState.getAgentState(self.index).numCarrying > carryingThresh:
+          return self.goHome(gameState, legalActionsList)
         
         if util.flipCoin(self.epsilon): # Flip Coin vs probability epsilon
             action = random.choice(legalActionsList) # if true, choose a random action
