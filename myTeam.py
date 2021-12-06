@@ -19,7 +19,6 @@ from game import Actions, Directions
 import game
 from operator import itemgetter
 import math
-import json
 
 #################
 # Team creation #
@@ -535,24 +534,14 @@ class JointParticleFilter(Inference):
 class ApproximateQAgent(OffensiveAgent):
 
     def registerInitialState(self, gameState):
-        with open("training.json") as json_file:
-          self.training = json.load(json_file)
-        self.inTraining = bool(self.training['inTraining'])
-        self.numEpisodes = self.training['numEpisodes']
-        self.MaxEpisodes = self.training['maxEpisodes']
         OffensiveAgent.registerInitialState(self, gameState)
         self.weights = util.Counter()
-        self.weights = {"trapped": 13.122370684591138, "enemy2scared": 22.968380471615937, "bias": 264.4039735582454, "distanceToEnemy2Ghost": 6.400730669328083, "enemy1scared": 31.57088332866122, "eats-food": 60.59532291717952, "distanceToEnemy1Ghost": 5.4450168219363455, "closest-food": -71.63420575843236, "meScared": 1.3421265214059215, "closestCapsule": -18.368584106364622, "distanceToEnemy1Pacman": 0.35962756114955263, "distanceToScared1Ghost": -32.54014536057823, "#-of-ghosts-1-step-away": -54.29555975955324, "foodCarry": -35.80272093504407, "depositFood": 169.36302262122584, "distanceToEnemy2Pacman": 0.0, "distanceToScared2Ghost": -3.16976239353985817}
+        self.weights = { "trapped": 13.122370684591138, "enemy2scared": 22.968380471615937, "bias": 264.4039735582454, "distanceToEnemy2Ghost": 6.400730669328083, "enemy1scared": 31.57088332866122, "eats-food": 60.59532291717952, "distanceToEnemy1Ghost": 5.4450168219363455, "closest-food": -71.63420575843236, "meScared": 1.3421265214059215, "closestCapsule": -18.368584106364622, "distanceToEnemy1Pacman": 0.35962756114955263, "distanceToScared1Ghost": -32.54014536057823, "#-of-ghosts-1-step-away": -54.29555975955324, "foodCarry": -35.80272093504407, "depositFood": 169.36302262122584, "distanceToEnemy2Pacman": 0.0, "distanceToScared2Ghost": -3.16976239353985817}
         
-        if self.inTraining:
-          self.alpha = 0.75
-          self.epsilon = 0.4
-        else:
           # Turn off learning parameters
-          self.alpha = 0.0
-          self.epsilon = 0
+        self.alpha = 0.0
+        self.epsilon = 0
         self.discount = 0.85
-        self.training = {}
 
 
     def getAllFeatures(self, gameState):
@@ -697,7 +686,7 @@ class ApproximateQAgent(OffensiveAgent):
             possibleActions.remove(Directions.STOP)
         highestStateValue = self.computeValueFromQValues(gameState) # Gets the highest value of a state 
         QValues = util.Counter()
-        scaredAgentNearby = []
+    
         for action in possibleActions: # loop through possible actions
             QValue = self.getQValue(gameState, action) 
             QValues[action] = QValue
@@ -832,14 +821,6 @@ class ApproximateQAgent(OffensiveAgent):
         return self.computeValueFromQValues(gameState)
 
     def final(self, gameState):
-      # if self.getScore(gameState) != 0:
-      #   self.weights['bias'] *= self.getScore(gameState)
-      # if self.inTraining:
-      #   dump = open("weights.json", 'w')
-      #   json.dump(self.weights, dump)
-      #   dump.close()
-      # with open("scoreList.txt", 'a') as f:
-      #   f.write("Score: {}\n".format(self.getScore(gameState)))
       return 0
 
 def closestFood(pos, food, walls):
@@ -888,13 +869,6 @@ class OffensiveQAgent(ApproximateQAgent):
     next_x, next_y = int(x + dx), int(y + dy)
 
     # count the number of ghosts 1-step away
-    distEnemy1 = self.getEnemyDistance(gameState, self.opponents[0])
-    distEnemy2 = self.getEnemyDistance(gameState, self.opponents[1])
-    # if distEnemy1 == 1 and distEnemy2 == 1: 
-    #   features["#-of-ghosts-1-step-away"] = 2   #sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
-    # elif distEnemy1 == 1 or distEnemy2 == 1: 
-    #   features["#-of-ghosts-1-step-away"] = 1
-    # else:
     features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
     if features['enemy1scared'] == 1.0:
         features['distanceToScared1Ghost'] = 1.0 + self.getEnemyDistance(gameState, self.opponents[0])/ float(walls.width * walls.height) if self.agentState(gameState,self.opponents[0]) == "Ghost" else 0
@@ -905,6 +879,10 @@ class OffensiveQAgent(ApproximateQAgent):
     # if there is no danger of ghosts then add other features
     if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
         features["eats-food"] = 1.0
+    if features['enemy1scared'] == 1.0 and (next_x, next_y) in ghosts:
+        features["eats-ghost1"] = 1.0
+    if features['enemy2scared'] == 1.0 and (next_x, next_y) in ghosts:
+        features["eats-ghost2"] = 1.0
     numFoodCarrying = float(gameState.getAgentState(self.index).numCarrying)
     if numFoodCarrying > 0:
       features['foodCarry'] = (numFoodCarrying)/(self.distanceToBases(gameState, 0)) # numCarrying
@@ -1146,6 +1124,376 @@ class HuntGhostDummyAgent(CaptureAgent):
         return self.mid > abs(x - x1)
 
     def evaluationFunction(self, gameState):
+        agent_state = gameState.getAgentState(self.index)
+        is_agent_pacman = agent_state.isPacman
+        pacman_pos = agent_state.getPosition()
+        # check if the our agent is a ghost and our scared timer is on
+        is_my_scared_timer_on = not is_agent_pacman and agent_state.scaredTimer > 0
+        # need a much better evaluation function for this Agent to perform decently
+        # TODO: REPLACE ME
+        opponents = self.getOpponents(gameState)
+        # for each opponent
+        totalNoisyDistance = 0
+        for oppIndex in opponents:
+            opp_state = gameState.getAgentState(oppIndex)
+            # get the supposed agent index
+            opp_position = opp_state.getPosition()
+            # threat identifier is a -1 if a state is bad for us (since it'll be multiplied by -1 at the end) and positive if state is good for us
+            threat_identifier = -1 if (is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else 1
+            # check if our reading returned anything
+            if opp_position:
+                # get the noisy distance from that position
+                noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
+                # if noisy distance is less than 2
+                # num_walls = 1 if self.num_walls[pacman_pos] == 0 else self.num_walls[pacman_pos]
+                # num_walls_eval = num_walls * 100
+                totalNoisyDistance += (noisy_distance)
+        return -totalNoisyDistance
+
+    def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+        """
+        Represents MAX's turn. Returns the value of the best action
+        PARAM:
+        gameState
+        d - current depth, or "round of play". starts at depth 1, limit is self.depth
+        agentIndex - in this implementation, MAX can only be our agent.
+        NOTE: If we wanted to include our teammate as the other MAX player,
+        this method would need to be slightly changed
+        currTurn - In this implementation, currTurn in this method is always 0.
+        This is because our agent's turn is always first.
+        alpha, beta - for pruning
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+        if d > self.depth:  # max depth exceeded
+            return self.evaluationFunction(gameState)
+
+        v = float("-inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1]  # whose turn is next
+            v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta)))
+            if v > beta:
+                # prune
+                return v
+            alpha = max(alpha, v)
+        return v
+
+    def minValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
+        """
+        Represents MIN's turn. Returns the value of the best action
+        PARAM:
+        gameState
+        d - current depth, or "round of play". starts at depth 1, limit is self.depth
+        agentIndex - player whose turn it is right now. Can be any of MAX's opponents
+        currTurn - currTurn + 1 is used to determine who's playing next
+        alpha, beta - for pruning
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+        if d > self.depth:
+            return self.evaluationFunction(gameState)
+
+        v = float("inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        if currTurn == self.turns - 1:
+            # if last Agent of ply, call maxAgent to play
+            nextTurn = 0
+            nextAgentIndex = self.agents[nextTurn]  # whose turn it is next
+            for action in legalActions:
+                v = min(v,
+                        self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn,
+                                      alpha, beta))
+                if v < alpha:
+                    # prune
+                    return v
+                beta = min(beta, v)
+            return v
+
+        # else, call another minAgent to play
+        for action in legalActions:
+            nextAgentIndex = self.agents[currTurn + 1]
+            v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta)))
+            if v < alpha:
+                # prune
+                return v
+            beta = min(beta, v)
+        return v
+
+    def alphaBetaSearch(self, gameState, d, agentIndex, currTurn):
+        """
+        Runs alpha-beta-search algorithm. Starts with MAX player.
+        PARAM:
+        gameState
+        d - current depth, set to 0
+        agentIndex - player whose turn it is right now; to start, our agent's index
+        currTurn - current Turn, starts with 0
+        COMBINING
+        Method must be copied for a-b-search to work in another agent
+        """
+
+        alpha = float("-inf")
+        beta = float("inf")
+        v = float("-inf")
+        legalActions = gameState.getLegalActions(agentIndex)
+        previousV = float("-inf")  # used for comparisons in determining the bestAction
+        bestAction = Directions.STOP
+        for action in legalActions:
+            if currTurn < len(self.agents) - 1:
+                nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
+                v = max(v,
+                        self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
+                                      alpha, beta))
+                if v > previousV:
+                    # compares every action value to return the best Action
+                    bestAction = action
+                if v >= beta:
+                    return bestAction
+                alpha = max(alpha, v)
+                previousV = v
+        return bestAction  # basically, a complicated argmax
+
+    def getEscapingChance(self, gameState):
+        '''
+            EVALUATE THE ESCAPING CHANCES OF A GHOST
+            HIGHER VALUES: MORE CHANCES TO ESCAPE
+            LOWER VALUES : LESS CHANCES TO ESCAPE
+        '''
+        legal_positions = [pos for pos in gameState.getWalls().asList(False) if pos[1] > 1]
+        escaping_chance_distribution = util.Counter()
+        # for each legal position, initialize number of escaping routes
+        for pos in legal_positions:
+            # get possible number of escape routes
+            possible_escape_routes = self.getSuccessorPositions(pos)
+            # assumption is survival chance is 100% if there are 4 routes, else 1 / num_escape routes
+            # survival_chance = 1 if (4 - len(possible_escape_routes)) == 0 else 1 / (4 - len(possible_escape_routes))
+            # (assuming 4 routes: 100%; 3 routes : 75%; 2 routes - 50%; 1 route : 25%
+            survival_chance = 0.25 * len(possible_escape_routes)
+            # get the possible escape routes
+            escaping_chance_distribution[pos] = survival_chance
+        # normalize escape route chances
+        escaping_chance_distribution.normalize()
+
+        for pos in legal_positions:
+            # old_belief
+            old_belief = escaping_chance_distribution[pos]
+            # get possible number of escape routes
+            possible_escape_routes = self.getSuccessorPositions(pos)
+            # assumption is survival chance is 100% if there are 4 routes, else 1 / num_escape routes
+            # survival_chance = 1 if (4 - len(possible_escape_routes)) == 0 else 1 / (4 - len(possible_escape_routes))
+            # (assuming 4 routes: 100%; 3 routes : 75%; 2 routes - 50%; 1 route : 25%
+            survival_chance = 0.25 * len(possible_escape_routes)
+            # for each escape route,
+            # calculate the survival chance thru that route
+            sum = 0
+            for escape_route in possible_escape_routes:
+                # sum is belief of escape route * survival chance
+                sum += escaping_chance_distribution[escape_route] * survival_chance
+            new_belief = old_belief if (old_belief - sum) < 0 else (old_belief - sum)
+            # print new_belief
+            # get the possible escape routes
+            escaping_chance_distribution[pos] = new_belief
+        escaping_chance_distribution.normalize()
+        return escaping_chance_distribution
+    
+    def getSuccessorPositions(self, position):
+        legalPos = []
+        x, y = position
+        if (x + 1, y) in self.legal_positions:
+            legalPos.append(((x + 1), y))
+        if (x - 1, y) in self.legal_positions:
+            legalPos.append(((x - 1, y)))
+        if (x, y + 1) in self.legal_positions:
+            legalPos.append(((x, y + 1)))
+        if (x, y - 1) in self.legal_positions:
+            legalPos.append(((x, y - 1)))
+        return legalPos
+      
+      
+      
+      
+      
+      
+      
+class FinalAgent(OffensiveQAgent):
+    '''
+        AGENT TO SERIALLY BUST GHOSTS
+    '''
+
+    def registerInitialState(self, gameState):
+        """
+    This method handles the initial setup of the
+    agent to populate useful fields (such as what team
+    we're on).
+    A distanceCalculator instance caches the maze distances
+    between each pair of positions, so your agents can use:
+    self.distancer.getDistance(p1, p2)
+    IMPORTANT: This method may run for at most 15 seconds.
+    """
+
+        '''
+    Make sure you do not delete the following line. If you would like to
+    use Manhattan distances instead of maze distances in order to save
+    on initialization time, please take a look at
+    CaptureAgent.registerInitialState in captureAgents.py.
+    '''
+        CaptureAgent.registerInitialState(self, gameState)
+
+        '''
+    Your initialization code goes here, if you need any.
+    '''
+        # initial agent pos
+        self.initialAgentPos = gameState.getInitialAgentPosition(self.index)
+        # get opponents initial jail pos
+        opponents = self.getOpponents(gameState)
+        self.opponent_jail_pos = [gameState.getInitialAgentPosition(opponents[i]) for i in range(len(opponents))]
+        self.opponents = opponents
+        # distributions of belief of position for each opponent
+        self.opp_beliefs = [util.Counter() for _ in range(len(opponents))]
+
+        # calculate the mid pos of the board
+        xOpp, YOpp = min(self.opponent_jail_pos)
+        xInit, YInit = self.initialAgentPos
+        self.mid = abs(xOpp - xInit)
+
+        self.beliefsCounter = util.Counter()
+
+        # legal positions our pacman could occupy
+        legal_positions = self.getLegalPositions(gameState)
+        for jail in self.opponent_jail_pos:
+            # add jail if not already there bc some weird ass bug
+            if jail not in legal_positions:
+                legal_positions.append(jail)
+
+        self.legal_positions = legal_positions
+        num_partices = 400
+        self.inference1 = Inference(gameState, self.index, opponents[0], num_partices)
+        self.inference1.initializeUniformly()
+        self.inference2 = Inference(gameState, self.index, opponents[1], num_partices)
+        self.inference2.initializeUniformly()
+
+        self.beliefsCounter[self.opponents[0]] = self.inference1.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[1]] = self.inference2.getBeliefDistribution()
+
+        self.esc_dist = self.getEscapingChance(gameState)
+
+        #esc_beliefs = [self.esc_dist]
+        #self.displayDistributionsOverPositions(esc_beliefs)
+
+        # for alpha-beta pruning
+        self.depth = 2
+
+    def getLegalPositions(self, gameState):
+        '''
+        Method that returns all legal positions for a given gameState
+        #TODO: implement caching since legal positions are the same throughout the game
+        '''
+        walls = gameState.getWalls()
+        legalPositions = []
+        for line in walls:
+            row = [not a for a in line]
+            legalPositions.append(row)
+
+        legalPositionsAsList = []
+        for x in range(len(legalPositions)):
+            for y in range(len(legalPositions[x])):
+                position = (x, y)
+                if legalPositions[x][y]:
+                    legalPositionsAsList.append(position)
+        return legalPositionsAsList
+
+    def chooseAction(self, gameState):
+        '''INFERENCE'''
+
+        self.inference1.observe(gameState)
+        self.inference1.elapseTime()
+        beliefs1 = self.inference1.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[0]] = beliefs1
+
+        self.inference2.observe(gameState)
+        self.inference2.elapseTime()
+
+        beliefs2 = self.inference2.getBeliefDistribution()
+        self.beliefsCounter[self.opponents[1]] = beliefs2
+
+        self.agents = [self.index]
+        for opp in self.getOpponents(gameState):
+            if gameState.getAgentPosition(opp):
+                self.agents.append(opp)
+
+        '''
+            MINIMAX IT IF WE OUR SCARED TIMER IS ON
+        '''
+        # get agent state
+        agent_state = gameState.getAgentState(self.index)
+        # is in danger
+        is_in_danger = not agent_state.isPacman and agent_state.scaredTimer > 0
+        # if we are ghost and our timer is on, minimax
+        if is_in_danger:
+            self.turns = len(self.agents)  # number of turns for each depth of a-b-search
+            currTurn = 0
+            agentIndex = self.agents[currTurn]
+            return self.alphaBetaSearch(gameState, 1, agentIndex, currTurn)
+
+        return self.huntGhostAction(gameState)
+
+    def huntGhostAction(self, gameState):
+        # self.displayDistributionsOverPositions(beliefsList)
+
+        # is in home territory
+        # our scared timer is off
+        # minimize the distance between us and ghosts if we can see them, us and region of ghost's if we can see them
+        '''
+            PROBABILITY OF GHOSTS IN OUR HOME AREA
+        '''
+        # get the probability distribution of ghosts in our home territory
+        home_territory_opp_distribution = util.Counter()
+        for opponent in self.opponents:
+            # get the belief distribution
+            belief_distribution = self.beliefsCounter[opponent]
+            for pos in self.legal_positions:
+                # if pos is in home territory, add to our distribution
+                if self.isInHomeTerritory(pos):
+                    home_territory_opp_distribution[pos] += belief_distribution[pos]
+
+        # normalize the belief distribution
+        home_territory_opp_distribution.normalize()
+        # take action that minimizes our distance to a position
+        '''
+            TAKING ACTIONS
+        '''
+        # get actions
+        actions = gameState.getLegalActions(self.index)
+        action_dist_to_ghost = []
+
+        for action in actions:
+            '''
+                successor state and all it has to offer
+            '''
+            # get the successor state (state after which agent takes an action)
+            successor_state = gameState.generateSuccessor(self.index, action)
+            # get the agent state (AgentState instance let's us get position of agent)
+            agent_state = successor_state.getAgentState(self.index)
+            # access the position using agent position
+            new_agent_position = agent_state.getPosition()
+            # distance between our new agent pos and highest prob
+            dist_to_ghost = self.distancer.getDistance(new_agent_position, home_territory_opp_distribution.argMax())
+            # append action and dist to ghost that remain in home territory
+            if not agent_state.isPacman:
+                action_dist_to_ghost.append((action, dist_to_ghost))
+        return min(action_dist_to_ghost, key=itemgetter(1))[0]
+
+    def isInHomeTerritory(self, pos):
+        x, y = pos
+        x1, y1 = self.initialAgentPos
+
+        # middle x distance > x distance of pos - x distance of initial pos
+        return self.mid > abs(x - x1)
+
+    def evaluationFunction(self, gameState):
+        return self.computeValueFromQValues(gameState)
         agent_state = gameState.getAgentState(self.index)
         is_agent_pacman = agent_state.isPacman
         pacman_pos = agent_state.getPosition()
