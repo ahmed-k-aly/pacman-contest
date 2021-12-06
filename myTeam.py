@@ -129,6 +129,8 @@ class DummyAgent(CaptureAgent):
             if gameState.getAgentPosition(opp):
                 visibleOpponents.append(opp)
 
+        print visibleOpponents
+
         # agents who will be playing minimax     
         self.minimaxAgents = [self.index]
 
@@ -144,6 +146,8 @@ class DummyAgent(CaptureAgent):
                 closestOpp = opp
         if closestOpp:
             self.minimaxAgents.append(opp)
+
+        print self.minimaxAgents
 
         # position to determine if we want to run minimax at all
         myPos = gameState.getAgentState(self.index).getPosition()
@@ -469,11 +473,11 @@ class DummyAgent(CaptureAgent):
 
         # if we ended up in jail, then BAD state
         if myPos == startPos:
-            return -9999999
+            return float("-inf")
 
         # if we are near jail (in the case that minimax is looking TOO far ahead) then BAD state
         if self.distancer.getDistance(myPos, startPos) <= self.depth + 1:
-            return -9999999
+            return float("-inf")
         score = 0 # the score for the state we will return
 
         # initializes a list of all visible opponents
@@ -484,12 +488,11 @@ class DummyAgent(CaptureAgent):
         
         # if the opponent went back to jail, then GREAT STATE
         if gameState.getAgentState(self.minimaxAgents[1]).getPosition() == gameState.getInitialAgentPosition(self.minimaxAgents[1]):
-            print "here"
-            return 9999999
+            return float("inf")
 
         # if we got rid of our opponent, then GREAT state
         if self.minimaxAgents[1] not in visibleOpponents:
-            return 9999999
+            return float("inf")
         
         # our first feature: nearby opponetns
         oppFeature = 0
