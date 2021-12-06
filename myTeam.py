@@ -11,7 +11,9 @@
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 import math
+from os import close
 import random
+from distanceCalculator import DistanceCalculator
 import util
 from baselineTeam import ReflexCaptureAgent
 
@@ -109,6 +111,9 @@ class DummyAgent(CaptureAgent):
         # limit of food we're defending
         self.foodEaten = 0
 
+        # depth for minimax:
+        self.depth = 2
+
     def chooseAction(self, gameState):
         """
     Picks among actions randomly.
@@ -116,7 +121,43 @@ class DummyAgent(CaptureAgent):
 
         '''
                 PICK AN ACTION
+
         '''
+        
+        visibleOpponents = []
+        for opp in self.getOpponents(gameState):
+            if gameState.getAgentPosition(opp):
+                visibleOpponents.append(opp)
+
+        # agents who will be playing minimax     
+        self.minimaxAgents = [self.index]
+
+        # a really complicatd argmin: add to self.minimax agents the closest opponent
+        closestOpp = None
+        leastDistance = 100000
+        myPos = gameState.getAgentState(self.index).getPosition()
+        for opp in visibleOpponents:
+            oppPos = gameState.getAgentState(opp).getPosition()
+            oppDist = self.distancer.getDistance(myPos, oppPos)
+            if oppDist < leastDistance:
+                leastDistance = oppDist
+                closestOpp = opp
+        if closestOpp:
+            self.minimaxAgents.append(opp)
+
+        # position to determine if we want to run minimax at all
+        myPos = gameState.getAgentState(self.index).getPosition()
+        # number of turns in each minimax round
+        self.turns = len(self.minimaxAgents)
+
+        # if there is any opponent that's less than or equal to 2 distances away, run minimax
+        for a in self.minimaxAgents:
+            if a != self.index:
+                aPos = gameState.getAgentState(a).getPosition()
+                if self.distancer.getDistance(myPos, aPos) <= 1:
+                    print "running minimax"
+                    return self.alphaBetaSearch(gameState, 0, self.index, 0)
+
         actions = gameState.getLegalActions(self.index)
         # check if we're in home territory
         # get pacman pos
@@ -302,7 +343,7 @@ class DummyAgent(CaptureAgent):
         v = float("-inf")
         legalActions = gameState.getLegalActions(agentIndex)
         for action in legalActions:
-            nextAgentIndex = self.agents[currTurn + 1]  # whose turn is next
+            nextAgentIndex = self.minimaxAgents[currTurn + 1]  # whose turn is next
             v = max((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
                                       alpha, beta)))
             if v > beta:
@@ -331,7 +372,7 @@ class DummyAgent(CaptureAgent):
         if currTurn == self.turns - 1:
             # if last Agent of ply, call maxAgent to play
             nextTurn = 0
-            nextAgentIndex = self.agents[nextTurn]  # whose turn it is next
+            nextAgentIndex = self.minimaxAgents[nextTurn]  # whose turn it is next
             for action in legalActions:
                 v = min(v,
                         self.maxValue(gameState.generateSuccessor(agentIndex, action), d + 1, nextAgentIndex, nextTurn,
@@ -344,7 +385,7 @@ class DummyAgent(CaptureAgent):
 
         # else, call another minAgent to play
         for action in legalActions:
-            nextAgentIndex = self.agents[currTurn + 1]
+            nextAgentIndex = self.minimaxAgents[currTurn + 1]
             v = min((v, self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
                                       alpha, beta)))
             if v < alpha:
@@ -372,8 +413,8 @@ class DummyAgent(CaptureAgent):
         previousV = float("-inf")  # used for comparisons in determining the bestAction
         bestAction = random.choice(legalActions)
         for action in legalActions:
-            if currTurn < len(self.agents) - 1:
-                nextAgentIndex = self.agents[currTurn + 1]  # whose turn it is next
+            if currTurn < len(self.minimaxAgents) - 1:
+                nextAgentIndex = self.minimaxAgents[currTurn + 1]  # whose turn it is next
                 v = max(v,
                         self.minValue(gameState.generateSuccessor(agentIndex, action), d, nextAgentIndex, currTurn + 1,
                                       alpha, beta))
@@ -386,13 +427,52 @@ class DummyAgent(CaptureAgent):
                 previousV = v
         return bestAction  # basically, a complicated argmax
     
+    def closeOppFactor(self, oppDistances, scaredTimer, isPacman):
+        WEIGHT = 100
+        sign = -1
+        value = 0
+        for dist in oppDistances:
+            # if we have enough time to reach our scared opponent, the shorter the distance, the better
+            if scaredTimer >= dist:
+                sign = 1
+            else:
+                if isPacman:
+                    sign = 1
+                else:
+                    sign = -1
+            value += sign * WEIGHT / dist
+        return value
+    
+    def capsuleFactor(self, capsuleDistances):
+        WEIGHT = 120
+        value = 0
+        for dist in capsuleDistances:
+            if dist <= 5:
+                value += WEIGHT / dist
+        return value
+
+    def foodFactor(self, nearbyFoodDistances):
+        WEIGHT = 15
+        value = 0
+        for food, dist in nearbyFoodDistances.items():
+           value += WEIGHT / dist
+        return value
+
     def evaluationFunction(self, gameState):
+        OPPWEIGHT = 100
+        CAPSULE_WEIGHT = 100
+
         myPos = gameState.getAgentState(self.index).getPosition()
         isPacman = gameState.getAgentState(self.index).isPacman
 
         startPos = gameState.getInitialAgentPosition(self.index)
 
+        # if we ended up in jail, then BAD state
         if myPos == startPos:
+            return -9999999
+
+        # if we are near jail (in the case that minimax is looking TOO far ahead) then BAD state
+        if self.distancer.getDistance(myPos, startPos) <= self.depth + 1:
             return -9999999
         score = 0 # the score for the state we will return
 
@@ -401,34 +481,44 @@ class DummyAgent(CaptureAgent):
         for opp in self.getOpponents(gameState):
             if gameState.getAgentPosition(opp):
                 visibleOpponents.append(opp)
-
-        # position of our agent, and determine whether we are on our side of the board
-
-        # FOOD-FEATURE: initializes a map from all nearby food to how far away they are
-        nearbyFoodDistances= {}
-        for food in self.getFood(gameState).asList():
-            distance = self.distancer.getDistance(myPos, food)
-            if distance <= 4:
-                nearbyFoodDistances[food] = distance
         
-        oppDistances = []
-        oppScaredTimers = []
-        capsuleDistances = []
+        # if the opponent went back to jail, then GREAT STATE
+        if gameState.getAgentState(self.minimaxAgents[1]).getPosition() == gameState.getInitialAgentPosition(self.minimaxAgents[1]):
+            print "here"
+            return 9999999
 
-        # CAPSULE-FEATURE: initializes a list of the distances of the nearest capsules
+        # if we got rid of our opponent, then GREAT state
+        if self.minimaxAgents[1] not in visibleOpponents:
+            return 9999999
+        
+        # our first feature: nearby opponetns
+        oppFeature = 0
+        for oppIndex in visibleOpponents:
+            oppState = gameState.getAgentState(oppIndex)
+            oppPos = oppState.getPosition()
+            oppDistance = self.distancer.getDistance(myPos, oppPos)
+
+            # boolean that determines if we're going to chase the opponent
+            chase = oppState.scaredTimer > 0
+            if chase:
+                oppFeature += OPPWEIGHT / oppDistance
+            else:
+                oppFeature -= OPPWEIGHT / oppDistance
+        
+        # our other feature
+        capsuleFeature = 0
+
+        capsuleDistances = []
+        # populates capsule distances
         capsules = self.getCapsules(gameState)
         for cap in capsules:
             capsuleDistances.append(self.distancer.getDistance(myPos, cap))
 
-        # CLOSE-OPPONENT-FEATURE: initializes a list of the distances of all visible opponents
-        # SCARED-OPPONENT-FEATURE: initializes a list of the scared timers of all visible opponents 
-        for oppIndex in visibleOpponents:
-            oppState = gameState.getAgentState(oppIndex)
-            oppPos = oppState.getPosition()
-            oppScaredTimers.append(oppState.scaredTimer)
-            oppDistances.append(self.distancer.getDistance(myPos, oppPos))
+        for dist in capsuleDistances:
+            if dist <= 3: # only consider nearby capsules
+                capsuleFeature += CAPSULE_WEIGHT / dist
 
-        return self.closeOppFactor(oppDistances, oppScaredTimers[0], isPacman) + self.capsuleFactor(capsuleDistances) + self.foodFactor(nearbyFoodDistances)
+        return oppFeature + capsuleFeature
 
 
 
