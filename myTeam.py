@@ -31,7 +31,6 @@ def createTeam(firstIndex, secondIndex, isRed,
   team, initialized using firstIndex and secondIndex as their agent
   index numbers.  isRed is True if the red team is being created, and
   will be False if the blue team is being created.
-
   As a potentially helpful development aid, this function can take
   additional string-valued keyword arguments ("first" and "second" are
   such arguments in the case of this function), which will come from
@@ -67,11 +66,9 @@ class OffensiveAgent(CaptureAgent):
     This method handles the initial setup of the
     agent to populate useful fields (such as what team
     we're on).
-
     A distanceCalculator instance caches the maze distances
     between each pair of positions, so your agents can use:
     self.distancer.getDistance(p1, p2)
-
     IMPORTANT: This method may run for at most 15 seconds.
     """
 
