@@ -326,7 +326,9 @@ class Inference():
 
 class ApproximateQAgent(BasisAgent):
     ''' 
-    Module used for an approximateQAgent with features
+    Module used for an approximateQAgent with features. This class implements
+    Approximate Q Learning. Extend it to implement specific agents. Only override
+    getFeatures(), rewardFunction(), final(), and getWeights() Functions.
     '''
 
     def registerInitialState(self, gameState):
