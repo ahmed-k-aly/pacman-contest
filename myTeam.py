@@ -108,13 +108,6 @@ class BasisAgent(CaptureAgent):
                     legalPositionsAsList.append(position)
         return legalPositionsAsList
 
-    def agentState(self,gameState, agentIndex):
-        ''' 
-        Returns if the passed in Agent is ghost or PACMAN
-        '''
-        agentState = str(gameState.getAgentState(agentIndex)) # convert state to string
-        return agentState.split(':')[0] # return the first word
-
     def distanceToExtremeFood(self, gameState, food, isClosest = True):
         '''
         Takes a food list and a boolean isClosest. If isClosest is True, returns 
@@ -135,7 +128,7 @@ class BasisAgent(CaptureAgent):
     def getEnemyDistance(self, gameState, enemyIndex):
         ''' 
         Returns Enemy distance if within our manhattan distance range. Else, returns the most probable 
-        position out of the belief distribution
+        distance out of the belief distribution
         '''
         myPos = gameState.getAgentPosition(self.index)
         enemyPos = self.beliefsCounter[enemyIndex].argMax()
@@ -170,13 +163,13 @@ class BasisAgent(CaptureAgent):
         legalActions = gameState.getLegalActions(self.index)
         if Directions.STOP in legalActions:
             legalActions.remove(Directions.STOP)
-        if self.agentState(gameState, self.index) == "Ghost":
-            return steps 
-        if gameState.getAgentPosition(self.index) == gameState.getInitialAgentPosition(self.index):
-                # if I wake up in Pacman heaven (starting position), i'm dead
+        if not gameState.getAgentState(self.index).isPacman: # If i'm ghost
+            return steps # we're home
+        if self.died(gameState):
+                # if i'm dead, return highest path cost
                 return 9999
         if steps > 40:
-            # if we're too far in
+            # if we're too far in, don't bother calculating
             return 1000
         for action in legalActions:
             successorState = gameState.generateSuccessor(self.index, action)
@@ -196,27 +189,11 @@ class BasisAgent(CaptureAgent):
         self.inference2.elapseTime()
         self.beliefsCounter[self.opponents[1]] = self.inference2.getBeliefDistribution() # updates belief distribution for opponent 2
 
-    def getSuccessorPositions(self, position):
-        ''' 
-        Method that gets successor positions
-        '''
-        legalPos = []
-        x, y = position
-        if (x + 1, y) in self.legal_positions:
-            legalPos.append(((x + 1), y))
-        if (x - 1, y) in self.legal_positions:
-            legalPos.append(((x - 1, y)))
-        if (x, y + 1) in self.legal_positions:
-            legalPos.append(((x, y + 1)))
-        if (x, y - 1) in self.legal_positions:
-            legalPos.append(((x, y - 1)))
-        return legalPos
-
     def died(self, newState):
         ''' 
-        Returns true if action makes us die
+        Returns true if we're dead in the passed in game state
         '''
-        if newState.getAgentPosition(self.index) == self.start:
+        if newState.getAgentPosition(self.index) ==  newState.getInitialAgentPosition(self.index):
             if len(self.observationHistory) >3.0: # if game already under way means we were not at base
                 return True
         return False
@@ -506,10 +483,10 @@ class OffensiveQAgent(ApproximateQAgent):
     # count the number of ghosts 1-step away
     features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
     if features['enemy1scared'] == 1.0: # if enemy1 is scared
-        features['distanceToScared1Ghost'] = 1.0 + self.getEnemyDistance(gameState, self.opponents[0])/ float(walls.width * walls.height) if self.agentState(gameState,self.opponents[0]) == "Ghost" else 0
-        features["#-of-ghosts-1-step-away"] = 0 # no fear of ghosts (assumes other ghost's effect is negligible)
+        features['distanceToScared1Ghost'] = 1.0 + self.getEnemyDistance(gameState, self.opponents[0])/ float(walls.width * walls.height) if not gameState.getAgentState(self.opponents[0]).isPacman else 0
+        features["#-of-ghosts-1-step-away"] = 0 # no fear of ghosts (assumes other ghost's effect is negligible)                                
     if features['enemy2scared'] == 1.0: # if enemy 2 is scared
-        features['distanceToScared2Ghost'] = 1.0 + self.getEnemyDistance(gameState, self.opponents[1])/ float(walls.width * walls.height) if self.agentState(gameState,self.opponents[1]) == "Ghost" else 0
+        features['distanceToScared2Ghost'] = 1.0 + self.getEnemyDistance(gameState, self.opponents[1])/ float(walls.width * walls.height) if  not gameState.getAgentState(self.opponents[1]).isPacman else 0
         features["#-of-ghosts-1-step-away"] = 0 # no fear of ghosts (assumes other ghost's effect is negligible)
     if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]: # if there is no danger of ghosts then eat food
         features["eats-food"] = 1.0
