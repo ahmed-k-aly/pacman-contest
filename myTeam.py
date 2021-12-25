@@ -623,9 +623,12 @@ class OffensiveQAgent(ApproximateQAgent):
         return reward
 
 
-class HuntGhostDummyAgent(BasisAgent):
+class DefensiveAgent(BasisAgent):
     '''
         AGENT TO SERIALLY BUST GHOSTS
+        THIS AGENT WILL BE IN CHARGE OF PROTECTING OUR BASE
+        IT HUNTS ENEMIES WHEN THEY COME TO GET FOOD,
+        DOES ITS BEST TO ENSURE ENEMIES THAT BREAK INTO OUT BASE DOESN'T LEAVE WITH ANY FOOD.
     '''
 
 
@@ -655,6 +658,10 @@ class HuntGhostDummyAgent(BasisAgent):
         return self.huntGhostAction(gameState)
 
     def huntGhostAction(self, gameState):
+        '''
+            THIS METHOD IS INCHARGE OF TAKING AN ACTION CLOSE TO OUR ENEMY BASED OFF BELIEF DISTRIBUTION
+            TAKE AN ACTION THAT BRINGS US CLOSER TO/ELIMINATE THE THE ENEMY
+        '''
         # self.displayDistributionsOverPositions(beliefsList)
 
         # is in home territory
@@ -701,13 +708,10 @@ class HuntGhostDummyAgent(BasisAgent):
         return min(action_dist_to_ghost, key=itemgetter(1))[0]
 
     def evaluationFunction(self, gameState):
-        agent_state = gameState.getAgentState(self.index)
-        is_agent_pacman = agent_state.isPacman
-        pacman_pos = agent_state.getPosition()
-        # check if the our agent is a ghost and our scared timer is on
-        is_my_scared_timer_on = not is_agent_pacman and agent_state.scaredTimer > 0
-        # need a much better evaluation function for this Agent to perform decently
-        # TODO: REPLACE ME
+        '''
+            EVALUATION FUNCTION TO BE USED FOR MINIMAX (WHEN OUR GHOST IS A SCARED GHOST).
+            THE FURTHER AN OPPONENT IS (MORE NOISY DISTANCE), THE BETTER.
+        '''
         opponents = self.getOpponents(gameState)
         # for each opponent
         totalNoisyDistance = 0
@@ -715,16 +719,12 @@ class HuntGhostDummyAgent(BasisAgent):
             opp_state = gameState.getAgentState(oppIndex)
             # get the supposed agent index
             opp_position = opp_state.getPosition()
-            # threat identifier is a -1 if a state is bad for us (since it'll be multiplied by -1 at the end) and positive if state is good for us
-            threat_identifier = -1 if (is_agent_pacman and opp_state.scaredTimer <= 0) or is_my_scared_timer_on else 1
             # check if our reading returned anything
             if opp_position:
                 # get the noisy distance from that position
                 noisy_distance = noisyDistance(gameState.getAgentState(self.index).getPosition(), opp_position)
-                # if noisy distance is less than 2
-                # num_walls = 1 if self.num_walls[pacman_pos] == 0 else self.num_walls[pacman_pos]
-                # num_walls_eval = num_walls * 100
-                totalNoisyDistance += (noisy_distance)
+                totalNoisyDistance += noisy_distance
+
         return -totalNoisyDistance
 
     def maxValue(self, gameState, d, agentIndex, currTurn, alpha, beta):
