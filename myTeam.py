@@ -27,7 +27,7 @@ import json
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first='HuntGhostDummyAgent', second='OffensiveQAgent'):
+               first='DefensiveAgent', second='OffensiveQAgent'):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
