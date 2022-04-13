@@ -3,6 +3,8 @@ Pacman AI contest for COSC-241
 
 Our Implementation for Pacman Capture The Flag taught in COSC-241: Artificial Intelligence
 
+Team: Ahmed Aly, Brandon Ngacho, Daniel Flores Garcia
+
 ## Introduction:
 Coming up with a plan for CTF was the task that took most of our time in the tournament. We had to come up with lots of different plans and evaluate each of them to know what to start implementing. We, initially, wanted to have two balanced agents that are both attacking and defending. However, we thought that this would be both time consuming, not yield a strong enough team, and would be harder to divide tasks through and progress as a team. Thus, we decided to divide our time and team into two agents: offensive and defensive. We then brainstormed the strategies to come up with for both agents. We decided on approaching these strategies by creating very simple agents and improving them over time. The following sums up the details of our agents.
 
