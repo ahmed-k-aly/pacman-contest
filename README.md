@@ -76,3 +76,6 @@ Below is a demo of our team (in red) playing a game in the tournament
 
 https://user-images.githubusercontent.com/52356809/145605861-c4af8384-feb8-44cb-9175-caae42d86dd9.mov
 
+
+https://user-images.githubusercontent.com/66703818/175831424-aede96a0-ee1a-4cdf-a2bf-31a32db8f4d6.mp4
+
